@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "cbehcpL4PBM=",
+  "dgSpecHash": "uq9myeuHaJ8=",
   "success": true,
-  "projectFilePath": "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master (1)\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj",
+  "projectFilePath": "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\erdem\\.nuget\\packages\\azure.core\\1.35.0\\azure.core.1.35.0.nupkg.sha512",
     "C:\\Users\\erdem\\.nuget\\packages\\azure.identity\\1.10.3\\azure.identity.1.10.3.nupkg.sha512",

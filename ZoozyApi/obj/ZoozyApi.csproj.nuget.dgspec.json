@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master (1)\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj": {}
+    "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj": {}
   },
   "projects": {
-    "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master (1)\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj": {
+    "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master (1)\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj",
+        "projectUniqueName": "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj",
         "projectName": "ZoozyApi",
-        "projectPath": "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master (1)\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj",
+        "projectPath": "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master\\ZoozyApi\\ZoozyApi.csproj",
         "packagesPath": "C:\\Users\\erdem\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master (1)\\Zoozy_Son-master\\ZoozyApi\\obj\\",
+        "outputPath": "C:\\Users\\erdem\\Desktop\\Zoozy_Son-master\\ZoozyApi\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\erdem\\AppData\\Roaming\\NuGet\\NuGet.Config",

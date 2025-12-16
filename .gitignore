@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+# Firebase secrets
+*.json
+firebase-service-account.json
+*zoozy-proje-firebase-adminsdk*
