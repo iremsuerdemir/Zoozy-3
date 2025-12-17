@@ -3,7 +3,7 @@
 /// Production için backend URL'ini buradan değiştirebilirsiniz
 class ApiConfig {
   // Development URL (Local network)
- static const String devBaseUrl = 'http://10.138.237.149:5001';
+ static const String devBaseUrl = 'http://192.168.211.149:5001';
 
   
   // Production URL - Buraya production URL'inizi yazın
