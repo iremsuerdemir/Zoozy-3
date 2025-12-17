@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/request_item.dart';
 import 'package:zoozy/screens/reguests_screen.dart';
 import 'package:zoozy/services/guest_access_service.dart';
+import 'package:zoozy/services/request_service.dart';
 
 class PetPickupPage extends StatefulWidget {
   const PetPickupPage({super.key});
@@ -15,6 +16,8 @@ class PetPickupPage extends StatefulWidget {
 
 class _PetPickupPageState extends State<PetPickupPage> {
   String? _selectedOption;
+  final RequestService _requestService = RequestService();
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -48,6 +51,10 @@ class _PetPickupPageState extends State<PetPickupPage> {
         profileImageBase64 = profileImagePath;
       }
 
+      setState(() {
+        _isSaving = true;
+      });
+
       final newReq = RequestItem(
         petName: args?['petName']?.toString() ?? '',
         serviceName: args?['serviceName']?.toString() ?? '',
@@ -62,13 +69,24 @@ class _PetPickupPageState extends State<PetPickupPage> {
         location: args?['location']?.toString() ?? '',
       );
 
-      final rawList = prefs.getString('requests');
-      List<RequestItem> reqList =
-          rawList != null ? RequestItem.decode(rawList) : [];
-      reqList.add(newReq);
-      await prefs.setString('requests', RequestItem.encode(reqList));
+      // Save to backend
+      final success = await _requestService.createRequest(newReq);
 
       if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+      });
+
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Talep kaydedilirken bir hata oluştu.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
 
       // Navigator push
       Navigator.pushReplacement(
@@ -189,13 +207,13 @@ class _PetPickupPageState extends State<PetPickupPage> {
 
                               // Mor degrade ileri butonu
                               GestureDetector(
-                                onTap: isButtonActive ? _onNext : null,
+                                onTap: (isButtonActive && !_isSaving) ? _onNext : null,
                                 child: Container(
                                   width: double.infinity,
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 16),
                                   decoration: BoxDecoration(
-                                    gradient: isButtonActive
+                                    gradient: (isButtonActive && !_isSaving)
                                         ? const LinearGradient(
                                             colors: [
                                               Colors.purple,
@@ -212,7 +230,7 @@ class _PetPickupPageState extends State<PetPickupPage> {
                                           ),
                                     borderRadius: BorderRadius.circular(14),
                                     boxShadow: [
-                                      if (isButtonActive)
+                                      if (isButtonActive && !_isSaving)
                                         const BoxShadow(
                                           color: Colors.purpleAccent,
                                           blurRadius: 8,
@@ -221,16 +239,25 @@ class _PetPickupPageState extends State<PetPickupPage> {
                                     ],
                                   ),
                                   child: Center(
-                                    child: Text(
-                                      "İleri",
-                                      style: TextStyle(
-                                        color: isButtonActive
-                                            ? Colors.white
-                                            : Colors.black54,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                    child: _isSaving
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                            ),
+                                          )
+                                        : Text(
+                                            "İleri",
+                                            style: TextStyle(
+                                              color: (isButtonActive && !_isSaving)
+                                                  ? Colors.white
+                                                  : Colors.black54,
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
                                   ),
                                 ),
                               ),

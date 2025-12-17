@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:zoozy/screens/settings_screen.dart';
+import 'package:zoozy/services/auth_service.dart';
 
 class PasswordForgotScreen extends StatefulWidget {
   const PasswordForgotScreen({super.key});
@@ -11,6 +11,7 @@ class PasswordForgotScreen extends StatefulWidget {
 
 class _PasswordForgotScreenState extends State<PasswordForgotScreen> {
   final TextEditingController _emailController = TextEditingController();
+  final AuthService _authService = AuthService();
   bool _isLoading = false;
 
   static const Color zoozyPurple = Color(0xFF9C27B0);
@@ -35,29 +36,41 @@ class _PasswordForgotScreenState extends State<PasswordForgotScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: _emailController.text,
-      );
+      // Backend API ile şifre sıfırlama
+      final response = await _authService.resetPassword(email);
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Şifre değiştirme bağlantısı e-postanıza gönderildi."),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.all(16),
-          duration: Duration(seconds: 3),
-        ),
-      );
+      if (response.success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.message.isNotEmpty 
+                ? response.message 
+                : "Yeni şifreniz e-posta adresinize gönderildi."),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            duration: const Duration(seconds: 3),
+          ),
+        );
 
-      Navigator.pop(context);
-    } on FirebaseAuthException catch (e) {
-      String message = "Bir hata oluştu.";
-      if (e.code == 'user-not-found') {
-        message = "Bu e-posta adresiyle kayıtlı kullanıcı bulunamadı.";
-      } else if (e.code == 'invalid-email') {
-        message = "Geçersiz e-posta adresi.";
+        Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(response.message.isNotEmpty 
+                ? response.message 
+                : "Şifre sıfırlama işlemi başarısız oldu."),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      String message = "Bir hata oluştu: ${e.toString()}";
+      if (e.toString().contains('network') || e.toString().contains('connection')) {
+        message = "İnternet bağlantınızı kontrol edin.";
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -69,7 +82,9 @@ class _PasswordForgotScreenState extends State<PasswordForgotScreen> {
         ),
       );
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 

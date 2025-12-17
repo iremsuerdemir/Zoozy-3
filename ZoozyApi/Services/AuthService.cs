@@ -2,6 +2,7 @@ using ZoozyApi.Data;
 using ZoozyApi.Dtos;
 using ZoozyApi.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using BCrypt.Net;
 
 namespace ZoozyApi.Services
@@ -14,17 +15,22 @@ namespace ZoozyApi.Services
         Task<UserDto?> GetUserByIdAsync(int id);
         Task<UserDto?> GetUserByEmailAsync(string email);
         Task<ResetPasswordResponse> ResetPasswordAsync(string email);
+        Task<ConfirmResetPasswordResponse> ConfirmResetPasswordAsync(string token, string newPassword);
     }
 
     public class AuthService : IAuthService
     {
         private readonly AppDbContext _context;
         private readonly ILogger<AuthService> _logger;
+        private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
 
-        public AuthService(AppDbContext context, ILogger<AuthService> logger)
+        public AuthService(AppDbContext context, ILogger<AuthService> logger, IEmailService emailService, IConfiguration configuration)
         {
             _context = context;
             _logger = logger;
+            _emailService = emailService;
+            _configuration = configuration;
         }
 
         /// <summary>
@@ -314,7 +320,7 @@ namespace ZoozyApi.Services
         }
 
         /// <summary>
-        /// Şifre sıfırlama - yeni rastgele şifre üret ve SSMS'e kaydet
+        /// Şifre sıfırlama - token oluştur ve email'e link gönder
         /// </summary>
         public async Task<ResetPasswordResponse> ResetPasswordAsync(string email)
         {
@@ -334,36 +340,55 @@ namespace ZoozyApi.Services
 
                 if (user == null)
                 {
+                    // Güvenlik için: Kullanıcı yoksa da başarılı mesajı döndür
                     return new ResetPasswordResponse
                     {
-                        Success = false,
-                        Message = "Bu email adresine sahip kullanıcı bulunamadı."
+                        Success = true,
+                        Message = "Eğer bu email adresine kayıtlı bir hesap varsa, şifre sıfırlama linki e-posta adresinize gönderilmiştir."
                     };
                 }
 
-                // Yeni rastgele şifre oluştur (8 karakterli)
-                string newPassword = GenerateRandomPassword(8);
-                // Şifreyi trim et ve hash'le
-                string passwordHash = BCrypt.Net.BCrypt.HashPassword(newPassword.Trim());
+                // Token oluştur (Güvenli rastgele string)
+                string resetToken = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+                    .Replace("+", "-")
+                    .Replace("/", "_")
+                    .Replace("=", "")
+                    .Substring(0, 32);
 
-                // Veritabanında şifreyi güncelle
-                user.PasswordHash = passwordHash;
-                user.Provider = "local";
+                // Token'ı veritabanına kaydet (1 saat geçerli)
+                user.PasswordResetToken = resetToken;
+                user.PasswordResetTokenExpiry = DateTime.UtcNow.AddHours(1);
                 user.UpdatedAt = DateTime.UtcNow;
 
                 _context.Users.Update(user);
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation($"Şifre sıfırlama başarılı: {user.Email}");
+                _logger.LogInformation($"Şifre sıfırlama token'ı oluşturuldu: {user.Email}");
 
-                // TODO: Gerçek ortamda email gönder
-                // await SendPasswordResetEmailAsync(user.Email, newPassword);
+                // Reset URL oluştur (Frontend URL'i)
+                var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL") 
+                    ?? _configuration["FrontendSettings:BaseUrl"]
+                    ?? "http://localhost:3000"; // Varsayılan
+                
+                var resetUrl = $"{frontendUrl}/reset-password?token={resetToken}";
+
+                // Email gönder
+                bool emailSent = await _emailService.SendPasswordResetEmailAsync(
+                    user.Email, 
+                    resetToken, 
+                    user.DisplayName,
+                    resetUrl
+                );
+
+                if (!emailSent)
+                {
+                    _logger.LogWarning($"Email gönderilemedi: {user.Email}.");
+                }
 
                 return new ResetPasswordResponse
                 {
                     Success = true,
-                    Message = "Yeni şifreniz e-mail adresinize gönderilmiştir.",
-                    NewPassword = newPassword // Sadece demo için (gerçek ortamda döndürme!)
+                    Message = "Eğer bu email adresine kayıtlı bir hesap varsa, şifre sıfırlama linki e-posta adresinize gönderilmiştir."
                 };
             }
             catch (Exception ex)
@@ -373,6 +398,76 @@ namespace ZoozyApi.Services
                 {
                     Success = false,
                     Message = "Şifre sıfırlama işlemi sırasında hata oluştu."
+                };
+            }
+        }
+
+        /// <summary>
+        /// Token ile şifre sıfırlama onayı ve yeni şifre belirleme
+        /// </summary>
+        public async Task<ConfirmResetPasswordResponse> ConfirmResetPasswordAsync(string token, string newPassword)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(newPassword))
+                {
+                    return new ConfirmResetPasswordResponse
+                    {
+                        Success = false,
+                        Message = "Token ve yeni şifre gereklidir."
+                    };
+                }
+
+                if (newPassword.Length < 6)
+                {
+                    return new ConfirmResetPasswordResponse
+                    {
+                        Success = false,
+                        Message = "Şifre en az 6 karakter olmalıdır."
+                    };
+                }
+
+                // Token ile kullanıcıyı bul
+                var user = await _context.Users
+                    .FirstOrDefaultAsync(u => u.PasswordResetToken == token 
+                        && u.PasswordResetTokenExpiry != null 
+                        && u.PasswordResetTokenExpiry > DateTime.UtcNow);
+
+                if (user == null)
+                {
+                    return new ConfirmResetPasswordResponse
+                    {
+                        Success = false,
+                        Message = "Geçersiz veya süresi dolmuş token. Lütfen yeni bir şifre sıfırlama talebi oluşturun."
+                    };
+                }
+
+                // Yeni şifreyi hash'le ve kaydet
+                string passwordHash = BCrypt.Net.BCrypt.HashPassword(newPassword.Trim());
+                user.PasswordHash = passwordHash;
+                user.Provider = "local";
+                user.PasswordResetToken = null; // Token'ı temizle
+                user.PasswordResetTokenExpiry = null;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                _context.Users.Update(user);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation($"Şifre başarıyla sıfırlandı: {user.Email}");
+
+                return new ConfirmResetPasswordResponse
+                {
+                    Success = true,
+                    Message = "Şifreniz başarıyla güncellendi. Yeni şifrenizle giriş yapabilirsiniz."
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Şifre sıfırlama onayı hatası: {ex.Message}");
+                return new ConfirmResetPasswordResponse
+                {
+                    Success = false,
+                    Message = "Şifre güncelleme işlemi sırasında hata oluştu."
                 };
             }
         }

@@ -46,6 +46,9 @@ if (string.IsNullOrWhiteSpace(connectionString))
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
 
+// Email servis
+builder.Services.AddScoped<IEmailService, EmailService>();
+
 // Auth servis
 builder.Services.AddScoped<IAuthService, AuthService>();
 

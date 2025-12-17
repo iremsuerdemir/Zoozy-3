@@ -11,7 +11,8 @@ import 'package:zoozy/screens/reguests_screen.dart';
 import 'package:zoozy/screens/favori_page.dart';
 import 'package:zoozy/models/favori_item.dart';
 import 'package:zoozy/models/comment.dart';
-import 'package:zoozy/services/comment_service.dart';
+import 'package:zoozy/services/comment_service_http.dart';
+import 'package:zoozy/services/favorite_service.dart';
 import 'package:zoozy/services/guest_access_service.dart';
 
 // Tema Renkleri
@@ -56,10 +57,12 @@ class CaregiverProfilpage extends StatefulWidget {
 }
 
 class _CaregiverProfilpageState extends State<CaregiverProfilpage> {
-  final CommentService _commentService = CommentService();
+  final CommentServiceHttp _commentService = CommentServiceHttp();
+  final FavoriteService _favoriteService = FavoriteService();
   List<Comment> _comments = [];
   String? _currentUserName;
   bool _isFavorite = false;
+  bool _isLoadingComments = false;
 
   @override
   void initState() {
@@ -70,26 +73,45 @@ class _CaregiverProfilpageState extends State<CaregiverProfilpage> {
   }
 
   Future<void> _checkIfFavorite() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> mevcutFavoriler = prefs.getStringList("favoriler") ?? [];
-
-    _isFavorite = mevcutFavoriler.any((f) {
-      final decoded = jsonDecode(f);
-      return decoded["title"] == widget.displayName &&
-          decoded["tip"] == "caregiver";
-    });
-    setState(() {});
-  }
-
-  void _loadComments() {
+    final exists = await _favoriteService.isFavorite(
+      title: widget.displayName,
+      tip: "caregiver",
+    );
     setState(() {
-      _comments = _commentService.getCommentsForCard(widget.userName);
+      _isFavorite = exists;
     });
   }
 
-  void _onCommentAdded(Comment comment) {
-    _commentService.addComment(widget.userName, comment);
-    _loadComments();
+  Future<void> _loadComments() async {
+    setState(() {
+      _isLoadingComments = true;
+    });
+
+    try {
+      final comments = await _commentService.getCommentsForCard(widget.userName);
+      setState(() {
+        _comments = comments;
+        _isLoadingComments = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingComments = false;
+      });
+      print('Yorum yükleme hatası: $e');
+    }
+  }
+
+  Future<void> _onCommentAdded(Comment comment) async {
+    final success = await _commentService.addComment(widget.userName, comment);
+    if (success) {
+      await _loadComments();
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Yorum eklenirken bir hata oluştu.')),
+        );
+      }
+    }
   }
 
   Future<void> _loadCurrentUser() async {
@@ -103,8 +125,6 @@ class _CaregiverProfilpageState extends State<CaregiverProfilpage> {
     if (!await GuestAccessService.ensureLoggedIn(context)) {
       return;
     }
-    final prefs = await SharedPreferences.getInstance();
-    List<String> mevcutFavoriler = prefs.getStringList("favoriler") ?? [];
 
     final item = FavoriteItem(
       title: widget.displayName,
@@ -114,26 +134,24 @@ class _CaregiverProfilpageState extends State<CaregiverProfilpage> {
       tip: "caregiver",
     );
 
-    bool zatenVar = mevcutFavoriler.any((f) {
-      final decoded = jsonDecode(f);
-      return decoded["title"] == item.title && decoded["tip"] == item.tip;
-    });
-
+    bool success;
     String message;
 
-    if (zatenVar) {
-      mevcutFavoriler.removeWhere((f) {
-        final decoded = jsonDecode(f);
-        return decoded["title"] == item.title && decoded["tip"] == item.tip;
-      });
-      message = "Favorilerden çıkarıldı.";
+    if (_isFavorite) {
+      success = await _favoriteService.removeFavorite(
+        title: item.title,
+        tip: item.tip,
+        imageUrl: item.imageUrl,
+      );
+      message = success ? "Favorilerden çıkarıldı." : "Favoriden çıkarılırken bir hata oluştu.";
     } else {
-      mevcutFavoriler.add(jsonEncode(item.toJson()));
-      message = "Favorilere eklendi!";
+      success = await _favoriteService.addFavorite(item);
+      message = success ? "Favorilere eklendi!" : "Favori eklenirken bir hata oluştu.";
     }
 
-    await prefs.setStringList("favoriler", mevcutFavoriler);
-    await _checkIfFavorite();
+    if (success) {
+      await _checkIfFavorite();
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

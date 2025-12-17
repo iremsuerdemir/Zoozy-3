@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:zoozy/services/user_service_api.dart';
 
 class ServiceProvider extends ChangeNotifier {
   /// Yeni sistem – tüm servis kartları burada tutulur
@@ -11,6 +12,10 @@ class ServiceProvider extends ChangeNotifier {
   String selectedServiceName = "";
   String fullAddress = "";
 
+  /// Backend API service
+  final UserServiceApi _userServiceApi = UserServiceApi();
+  bool _isLoading = false;
+
   /// -----------------------------
   ///  GEÇİCİ SERVİS BİLGİLERİ
   /// -----------------------------
@@ -19,21 +24,51 @@ class ServiceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// AddLocation’dan gelen final adım
-  void finalizeService(String address) {
+  /// Load services from backend
+  Future<void> loadServices() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final backendServices = await _userServiceApi.getUserServices();
+      services = backendServices;
+    } catch (e) {
+      print('Servis yükleme hatası: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  bool get isLoading => _isLoading;
+
+  /// AddLocation'dan gelen final adım
+  Future<bool> finalizeService(String address) async {
     fullAddress = address;
     tempServiceDetails["address"] = address;
 
-    services.add({
+    final serviceData = {
       "serviceName": tempServiceDetails["serviceName"] ?? selectedServiceName,
       "serviceIcon": tempServiceDetails["serviceIcon"],
       "price": tempServiceDetails["price"],
       "description": tempServiceDetails["description"],
       "address": address,
-    });
+    };
+
+    // Save to backend
+    final success = await _userServiceApi.createService(serviceData);
+
+    if (success) {
+      // Reload services from backend to get the ID
+      await loadServices();
+    } else {
+      // Still add to local list even if backend save fails (for offline support)
+      services.add(serviceData);
+    }
 
     tempServiceDetails = {};
     notifyListeners();
+    return success;
   }
 
   /// -----------------------------
@@ -68,11 +103,29 @@ class ServiceProvider extends ChangeNotifier {
   }
 
   /// Servis sil
-  void removeService(int index) {
+  Future<bool> removeService(int index) async {
     if (index >= 0 && index < services.length) {
-      services.removeAt(index);
-      notifyListeners();
+      final service = services[index];
+      final serviceId = service['id'] as int?;
+
+      // Delete from backend if it has an ID
+      if (serviceId != null) {
+        final success = await _userServiceApi.deleteService(serviceId);
+        if (success) {
+          services.removeAt(index);
+          notifyListeners();
+          return true;
+        } else {
+          return false;
+        }
+      } else {
+        // Remove from local list if no ID (wasn't saved to backend)
+        services.removeAt(index);
+        notifyListeners();
+        return true;
+      }
     }
+    return false;
   }
 
   /// Hepsini temizle

@@ -10,6 +10,7 @@ import 'package:zoozy/screens/pet_profile_page.dart';
 import 'package:zoozy/screens/pet_walk_page.dart';
 import 'package:zoozy/screens/profile_screen.dart';
 import 'package:zoozy/services/guest_access_service.dart';
+import 'package:zoozy/services/request_service.dart';
 
 import '../models/request_item.dart';
 
@@ -28,11 +29,22 @@ class _RequestsScreenState extends State<RequestsScreen> {
   static const Color cardIconBgColor = Color(0xFFF3E5F5);
 
   List<RequestItem> requestList = [];
+  final RequestService _requestService = RequestService();
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadRequests();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Build tamamlandıktan sonra yükle (setState during build hatasını önlemek için)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadRequests();
+    });
   }
 
   IconData _getServiceIcon(String serviceName) {
@@ -57,21 +69,41 @@ class _RequestsScreenState extends State<RequestsScreen> {
   }
 
   Future<void> _deleteRequest(int index) async {
-    final prefs = await SharedPreferences.getInstance();
+    final request = requestList[index];
+    
+    // Delete from backend if it has an ID
+    if (request.id != null) {
+      final success = await _requestService.deleteRequest(request.id!);
+      if (!success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Talep silinirken bir hata oluştu.')),
+        );
+        return;
+      }
+    }
 
     setState(() {
       requestList.removeAt(index);
     });
-
-    prefs.setString('requests', RequestItem.encode(requestList));
   }
 
   Future<void> _loadRequests() async {
-    final prefs = await SharedPreferences.getInstance();
-    final rawList = prefs.getString('requests');
     setState(() {
-      requestList = rawList != null ? RequestItem.decode(rawList) : [];
+      _isLoading = true;
     });
+
+    try {
+      final requests = await _requestService.getUserRequests();
+      setState(() {
+        requestList = requests;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      print('Request yükleme hatası: $e');
+    }
   }
 
   Future<ImageProvider?> _loadProfileImageProvider(String userPhoto) async {
@@ -586,7 +618,12 @@ class _RequestsScreenState extends State<RequestsScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            if (requestList.isNotEmpty)
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(20.0),
+                child: CircularProgressIndicator(),
+              )
+            else if (requestList.isNotEmpty)
               ListView.builder(
                 shrinkWrap: true,
                 padding: const EdgeInsets.only(top: 30),

@@ -109,6 +109,10 @@ namespace ZoozyApi.Controllers
             return Ok(new { success = true, user });
         }
 
+        /// <summary>
+        /// Şifre sıfırlama talebi oluştur (Email'e link gönder)
+        /// POST /api/auth/reset-password
+        /// </summary>
         [HttpPost("reset-password")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
         {
@@ -123,6 +127,26 @@ namespace ZoozyApi.Controllers
 
             var result = await _authService.ResetPasswordAsync(request.Email);
             return Ok(result);
+        }
+
+        /// <summary>
+        /// Token ile şifre sıfırlama onayı ve yeni şifre belirleme
+        /// POST /api/auth/confirm-reset-password
+        /// </summary>
+        [HttpPost("confirm-reset-password")]
+        public async Task<IActionResult> ConfirmResetPassword([FromBody] ConfirmResetPasswordRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.Token) || string.IsNullOrWhiteSpace(request.NewPassword))
+            {
+                return BadRequest(new ConfirmResetPasswordResponse
+                {
+                    Success = false,
+                    Message = "Token ve yeni şifre gereklidir."
+                });
+            }
+
+            var result = await _authService.ConfirmResetPasswordAsync(request.Token, request.NewPassword);
+            return result.Success ? Ok(result) : BadRequest(result);
         }
     }
 }

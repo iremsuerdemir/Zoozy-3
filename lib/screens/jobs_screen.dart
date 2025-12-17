@@ -6,6 +6,7 @@ import 'package:zoozy/screens/minimal_calendar_page.dart';
 import 'package:zoozy/screens/profile_screen.dart';
 import 'package:zoozy/screens/help_center_page.dart';
 import 'package:zoozy/services/guest_access_service.dart';
+import 'package:zoozy/services/user_service_api.dart';
 import 'package:zoozy/screens/pet_walk_page.dart';
 
 class JobsScreen extends StatefulWidget {
@@ -18,11 +19,72 @@ class JobsScreen extends StatefulWidget {
 class _JobsScreenState extends State<JobsScreen> {
   // Seçilen ikon index'i
   int selectedIndex = 0;
+  
+  // Backend'den gelen job'lar
+  List<Map<String, dynamic>> _jobsList = [];
+  final UserServiceApi _userServiceApi = UserServiceApi();
+  bool _isLoading = true;
 
   // Renk paleti
   static const Color primaryPurple = Color.fromARGB(255, 111, 79, 172);
   static const Color softPink = Color(0xFFF48FB1);
   static const Color cardIconBgColor = Color(0xFFF3E5F5);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadJobs();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Build tamamlandıktan sonra yükle
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadJobs();
+    });
+  }
+
+  /// Backend'den diğer kullanıcıların job'larını yükle
+  Future<void> _loadJobs() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final jobs = await _userServiceApi.getOtherUsersServices();
+      setState(() {
+        _jobsList = jobs;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Job\'lar yüklenirken hata oluştu: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Hizmet ikonunu belirle
+  IconData _getServiceIcon(String serviceName) {
+    final lower = serviceName.toLowerCase();
+    if (lower.contains("gezdirme") || lower.contains("gezdir")) return Icons.directions_walk;
+    if (lower.contains("pansiyonu") || lower.contains("otel")) return Icons.home_filled;
+    if (lower.contains("günlük bakım") || lower.contains("bakım")) return Icons.light_mode;
+    if (lower.contains("taksi")) return Icons.local_taxi;
+    if (lower.contains("tımar")) return Icons.cut;
+    if (lower.contains("eğitim")) return Icons.school;
+    if (lower.contains("fotoğraf")) return Icons.photo_camera;
+    if (lower.contains("veteriner")) return Icons.health_and_safety;
+    return Icons.miscellaneous_services;
+  }
 
   Widget _buildIconTextCard(IconData icon, String text) {
     bool isSelected = _getIndexFromText(text) == selectedIndex;
@@ -108,6 +170,139 @@ class _JobsScreenState extends State<JobsScreen> {
       default:
         return 0;
     }
+  }
+
+  /// Job kartı widget'ı
+  Widget _buildJobCard(Map<String, dynamic> job) {
+    final serviceName = job['serviceName'] ?? '';
+    final address = job['address'] ?? '';
+    final price = job['price'];
+    final description = job['description'];
+    final userDisplayName = job['userDisplayName'] ?? 'Kullanıcı';
+    final userPhotoUrl = job['userPhotoUrl'];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Kullanıcı bilgisi
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: primaryPurple.withOpacity(0.2),
+                backgroundImage: userPhotoUrl != null && userPhotoUrl.isNotEmpty
+                    ? NetworkImage(userPhotoUrl)
+                    : null,
+                child: userPhotoUrl == null || userPhotoUrl.isEmpty
+                    ? const Icon(Icons.person, color: primaryPurple)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      userDisplayName,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      serviceName,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Hizmet detayları
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: cardIconBgColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  _getServiceIcon(serviceName),
+                  color: primaryPurple,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (price != null && price.isNotEmpty)
+                      Text(
+                        'Fiyat: $price₺',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: primaryPurple,
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            address,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (description != null && description.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              description,
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.grey[600],
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -239,61 +434,98 @@ class _JobsScreenState extends State<JobsScreen> {
               ],
             ),
             const SizedBox(height: 100),
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: primaryPurple.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Center(
-                child: Icon(Icons.pets, size: 60, color: primaryPurple),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 40),
-              child: Text(
-                "Birisi iş ilanı yayınladığında burada bilgilendirileceksiniz.\nBildirim almak için Backer olarak kaydolun.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.black87,
-                  height: 1.4,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: primaryPurple,
-                side: const BorderSide(color: primaryPurple, width: 1.5),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 14,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                elevation: 0,
-              ),
-              onPressed: () async {
-                if (!await GuestAccessService.ensureLoggedIn(context)) {
-                  return;
-                }
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const AgreementScreen(),
+            
+            // Loading durumu
+            if (_isLoading)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20.0),
+                  child: CircularProgressIndicator(
+                    color: primaryPurple,
                   ),
-                );
-              },
-              child: const Text(
-                "HİZMET SUN",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              )
+            // Job kartları
+            else if (_jobsList.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Mevcut İş İlanları',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ..._jobsList.map((job) => _buildJobCard(job)),
+                  ],
+                ),
+              )
+            // Boş durum
+            else
+              Column(
+                children: [
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: primaryPurple.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.pets, size: 60, color: primaryPurple),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 40),
+                    child: Text(
+                      "Henüz iş ilanı yok.\nYeni ilanlar burada görünecek.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.black87,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: primaryPurple,
+                      side: const BorderSide(color: primaryPurple, width: 1.5),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 40,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      elevation: 0,
+                    ),
+                    onPressed: () async {
+                      if (!await GuestAccessService.ensureLoggedIn(context)) {
+                        return;
+                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const AgreementScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      "HİZMET SUN",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  ),
+                ],
               ),
-            ),
             const SizedBox(height: 20),
           ],
         ),

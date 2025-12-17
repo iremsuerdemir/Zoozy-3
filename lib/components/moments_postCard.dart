@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zoozy/models/favori_item.dart';
 import 'package:zoozy/models/comment.dart';
-import 'package:zoozy/services/comment_service.dart';
+import 'package:zoozy/services/comment_service_http.dart';
+import 'package:zoozy/services/favorite_service.dart';
 import 'package:zoozy/components/comment_card.dart';
 import 'package:zoozy/components/comment_dialog.dart';
 
@@ -41,9 +41,11 @@ class MomentsPostCard extends StatefulWidget {
 class _MomentsPostCardState extends State<MomentsPostCard> {
   bool isFavorite = false;
   late int likeCount;
-  final CommentService _commentService = CommentService();
+  final CommentServiceHttp _commentService = CommentServiceHttp();
+  final FavoriteService _favoriteService = FavoriteService();
   List<Comment> _comments = [];
   bool _showComments = false;
+  bool _isLoadingComments = false;
 
   @override
   void initState() {
@@ -53,20 +55,41 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
     _loadComments();
   }
 
-  void _loadComments() {
+  Future<void> _loadComments() async {
     // Moment kartı için unique cardId kullanıyoruz
     final cardId =
         "moment_${widget.userName}_${widget.timePosted.millisecondsSinceEpoch}";
     setState(() {
-      _comments = _commentService.getCommentsForCard(cardId);
+      _isLoadingComments = true;
     });
+
+    try {
+      final comments = await _commentService.getCommentsForCard(cardId);
+      setState(() {
+        _comments = comments;
+        _isLoadingComments = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingComments = false;
+      });
+      print('Yorum yükleme hatası: $e');
+    }
   }
 
-  void _onCommentAdded(Comment comment) {
+  Future<void> _onCommentAdded(Comment comment) async {
     final cardId =
         "moment_${widget.userName}_${widget.timePosted.millisecondsSinceEpoch}";
-    _commentService.addComment(cardId, comment);
-    _loadComments();
+    final success = await _commentService.addComment(cardId, comment);
+    if (success) {
+      await _loadComments();
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Yorum eklenirken bir hata oluştu.')),
+        );
+      }
+    }
   }
 
   void _toggleComments() {
@@ -76,20 +99,14 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
   }
 
   Future<void> _checkIfFavorite() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> favs = prefs.getStringList("favoriler") ?? [];
-
-    final exists = favs.any((element) {
-      final item = FavoriteItem.fromJson(jsonDecode(element));
-      return item.imageUrl == widget.postImage && item.tip == "moments";
-    });
+    final exists = await _favoriteService.isFavorite(
+      title: widget.displayName,
+      tip: "moments",
+      imageUrl: widget.postImage,
+    );
 
     setState(() {
       isFavorite = exists;
-      // Favoriye ekliyse like'ı zaten artırdık, burada sadece kontrol ediyoruz.
-      // Basitlik adına, mevcut likeCount'u koruyoruz veya yeniden hesaplıyoruz.
-      // Sadece isFavorite durumunu doğru yansıtmak yeterli.
-      // Like sayısını sadece favori butonuna basıldığında değiştirmek daha doğru olur.
     });
   }
 
@@ -107,9 +124,6 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
   }
 
   Future<void> _favoriyeEkle() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> mevcutFavoriler = prefs.getStringList("favoriler") ?? [];
-
     final favItem = FavoriteItem(
       title: widget.displayName,
       subtitle: widget.description,
@@ -118,30 +132,30 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
       tip: "moments",
     );
 
-    if (!mevcutFavoriler.any((element) =>
-        FavoriteItem.fromJson(jsonDecode(element)).imageUrl ==
-        favItem.imageUrl)) {
-      mevcutFavoriler.add(jsonEncode(favItem.toJson()));
-      await prefs.setStringList("favoriler", mevcutFavoriler);
-
+    final success = await _favoriteService.addFavorite(favItem);
+    if (success) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text("Favorilere eklendi!")));
+    } else {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Favori eklenirken bir hata oluştu.")));
     }
   }
 
   Future<void> _favoridenSil() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> mevcutFavoriler = prefs.getStringList("favoriler") ?? [];
+    final success = await _favoriteService.removeFavorite(
+      title: widget.displayName,
+      tip: "moments",
+      imageUrl: widget.postImage,
+    );
 
-    mevcutFavoriler.removeWhere((element) {
-      final item = FavoriteItem.fromJson(jsonDecode(element));
-      return item.imageUrl == widget.postImage && item.tip == "moments";
-    });
-
-    await prefs.setStringList("favoriler", mevcutFavoriler);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Favorilerden kaldırıldı!")));
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Favorilerden kaldırıldı!")));
+    } else {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text("Favoriden kaldırılırken bir hata oluştu.")));
+    }
   }
 
   @override

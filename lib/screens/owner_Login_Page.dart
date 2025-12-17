@@ -356,12 +356,28 @@ class _OwnerLoginPageState extends State<OwnerLoginPage> {
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ForgotPassword(),
-                        ),
-                      );
+                      final email = _emailController.text.trim();
+                      
+                      // Email girilmişse o email'i ForgotPassword sayfasına gönder
+                      if (email.isNotEmpty && 
+                          RegExp(r'^[\w-.]+@([\w-]+\.)+[\w]{2,4}$').hasMatch(email)) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ForgotPassword(initialEmail: email),
+                          ),
+                        );
+                      } else {
+                        // Email girilmemişse uyarı göster
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Lütfen önce e-posta adresinizi girin."),
+                            backgroundColor: Colors.orange,
+                            behavior: SnackBarBehavior.floating,
+                            margin: EdgeInsets.all(16),
+                          ),
+                        );
+                      }
                     },
                     child: const Text(
                       "Şifrenizi mi unuttunuz?",

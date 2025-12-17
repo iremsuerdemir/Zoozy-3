@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zoozy/models/favori_item.dart';
+import 'package:zoozy/services/favorite_service.dart';
 import 'explore_screen.dart';
 import 'moments_screen.dart';
 import '../components/bottom_navigation_bar.dart'; // CustomBottomNavBar importu
@@ -25,6 +25,8 @@ class FavoriPage extends StatefulWidget {
 
 class _FavoriPageState extends State<FavoriPage> {
   List<FavoriteItem> favoriler = [];
+  final FavoriteService _favoriteService = FavoriteService();
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -32,31 +34,47 @@ class _FavoriPageState extends State<FavoriPage> {
     _loadFavoriler();
   }
 
-  Future<void> _loadFavoriler() async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> favStrings = prefs.getStringList("favoriler") ?? [];
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh when screen becomes visible again
+    _loadFavoriler();
+  }
 
+  Future<void> _loadFavoriler() async {
     setState(() {
-      favoriler = favStrings
-          .map((e) => FavoriteItem.fromJson(jsonDecode(e)))
-          .where((item) => item.tip == widget.favoriTipi)
-          .toList();
+      _isLoading = true;
     });
+
+    try {
+      final favorites = await _favoriteService.getUserFavorites(tip: widget.favoriTipi);
+      setState(() {
+        favoriler = favorites;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      print('Favori yükleme hatası: $e');
+    }
   }
 
   Future<void> _favoridenKaldir(int index) async {
-    final prefs = await SharedPreferences.getInstance();
-    List<String> favStrings = prefs.getStringList("favoriler") ?? [];
-
     final item = favoriler[index];
-    favStrings.removeWhere((f) {
-      final decoded = jsonDecode(f);
-      return decoded["title"] == item.title &&
-          decoded["subtitle"] == item.subtitle &&
-          decoded["tip"] == item.tip;
-    });
 
-    await prefs.setStringList("favoriler", favStrings);
+    final success = await _favoriteService.removeFavorite(
+      title: item.title,
+      tip: item.tip,
+      imageUrl: item.imageUrl,
+    );
+
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Favoriden kaldırılırken bir hata oluştu.")),
+      );
+      return;
+    }
 
     setState(() {
       favoriler.removeAt(index);
@@ -147,9 +165,11 @@ class _FavoriPageState extends State<FavoriPage> {
                               ),
                             ],
                           ),
-                          child: favoriler.isEmpty
-                              ? _bosDurum()
-                              : _favoriListesiOlustur(),
+                          child: _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : favoriler.isEmpty
+                                  ? _bosDurum()
+                                  : _favoriListesiOlustur(),
                         ),
                       );
                     },

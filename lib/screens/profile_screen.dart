@@ -33,6 +33,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadProfileData();
+    _loadServices();
+  }
+
+  Future<void> _loadServices() async {
+    // Load services from backend when screen initializes
+    final serviceProvider = Provider.of<ServiceProvider>(context, listen: false);
+    await serviceProvider.loadServices();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh services when screen becomes visible again
+    // Build tamamlandıktan sonra çağır (setState during build hatasını önlemek için)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadServices();
+    });
   }
 
   Future<void> _loadProfileData() async {
@@ -549,11 +566,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           ),
                                           TextButton(
                                             child: const Text("Evet"),
-                                            onPressed: () {
-                                              Provider.of<ServiceProvider>(
+                                            onPressed: () async {
+                                              final serviceProvider = Provider.of<ServiceProvider>(
                                                       context,
-                                                      listen: false)
-                                                  .removeService(index);
+                                                      listen: false);
+                                              final success = await serviceProvider.removeService(index);
+                                              if (!mounted) return;
+                                              
+                                              if (!success) {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text('Servis silinirken bir hata oluştu.'),
+                                                    backgroundColor: Colors.red,
+                                                  ),
+                                                );
+                                              }
                                               Navigator.pop(context);
                                             },
                                           ),

@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
+import '../config/api_config.dart';
 
 class AuthService {
   /// Backend API base URL
-  static const String baseUrl = 'http://192.168.211.149:5001/api/auth';
+  static String get baseUrl => ApiConfig.authUrl;
 
   /// Http client
   final http.Client httpClient;
@@ -187,30 +187,57 @@ class AuthService {
   }
 
   /// ==========================================
-  /// 4. ŞİFRE SIFLAMA (Firebase)
+  /// 4. ŞİFRE SIFLAMA (Token tabanlı - Email'e link gönder)
   /// ==========================================
-Future<AuthResponse> resetPassword(String email) async {
-  try {
-    final response = await httpClient.post(
-      Uri.parse('$baseUrl/reset-password'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email.trim()}),
-    );
+  Future<AuthResponse> resetPassword(String email) async {
+    try {
+      final response = await httpClient.post(
+        Uri.parse('$baseUrl/reset-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email.trim()}),
+      );
 
-    final data = jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
-    return AuthResponse(
-      success: data['success'],
-      message: data['message'],
-    );
-  } catch (e) {
-    return AuthResponse(
-      success: false,
-      message: 'Ağ hatası: ${e.toString()}',
-    );
+      return AuthResponse(
+        success: data['success'],
+        message: data['message'],
+      );
+    } catch (e) {
+      return AuthResponse(
+        success: false,
+        message: 'Ağ hatası: ${e.toString()}',
+      );
+    }
   }
-}
 
+  /// ==========================================
+  /// 4b. ŞİFRE SIFLAMA ONAYI (Token ile yeni şifre belirleme)
+  /// ==========================================
+  Future<AuthResponse> confirmResetPassword(String token, String newPassword) async {
+    try {
+      final response = await httpClient.post(
+        Uri.parse('$baseUrl/confirm-reset-password'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'token': token,
+          'newPassword': newPassword,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      return AuthResponse(
+        success: data['success'],
+        message: data['message'],
+      );
+    } catch (e) {
+      return AuthResponse(
+        success: false,
+        message: 'Ağ hatası: ${e.toString()}',
+      );
+    }
+  }
 
   /// ==========================================
   /// 5. KULLANICI BİLGİLERİNİ AL (ID ile)

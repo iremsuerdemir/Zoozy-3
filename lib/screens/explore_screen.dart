@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zoozy/components/CaregiverCard.dart';
@@ -9,6 +7,7 @@ import 'package:zoozy/screens/backers_list_screen.dart';
 import 'package:zoozy/screens/broadcast_page.dart';
 import 'package:zoozy/screens/caregiverProfilPage.dart';
 import 'package:zoozy/screens/favori_page.dart';
+import 'package:zoozy/services/favorite_service.dart';
 // BackersNearbyScreen'in dışarıdan import edildiği varsayılmıştır
 import 'package:zoozy/screens/login_page.dart';
 
@@ -71,17 +70,23 @@ class _ExploreScreenState extends State<ExploreScreen> {
     _favorileriYukle();
   }
 
-  /// SharedPreferences'tan favori bakıcı isimlerini yükler.
+  /// Backend'den favori bakıcı isimlerini yükler.
   Future<void> _favorileriYukle() async {
-    final prefs = await SharedPreferences.getInstance();
-    final favStrings = prefs.getStringList("favoriler") ?? [];
-    final mevcutIsimler = favStrings.map((e) {
-      final decoded = jsonDecode(e);
-      return decoded["title"] as String;
-    }).toSet();
-    setState(() {
-      favoriIsimleri = mevcutIsimler;
-    });
+    try {
+      final favoriteService = FavoriteService();
+      final favorites =
+          await favoriteService.getUserFavorites(tip: "caregiver");
+      final mevcutIsimler = favorites.map((f) => f.title).toSet();
+      setState(() {
+        favoriIsimleri = mevcutIsimler;
+      });
+    } catch (e) {
+      print('Favori yükleme hatası: $e');
+      // Hata durumunda boş set kullan
+      setState(() {
+        favoriIsimleri = <String>{};
+      });
+    }
   }
 
   // Kategoriye tıklandığında BackersNearbyScreen'e yönlendirir.

@@ -15,6 +15,10 @@ public class AppDbContext : DbContext
     public DbSet<ServiceRequest> ServiceRequests => Set<ServiceRequest>();
     public DbSet<FirebaseSyncLog> FirebaseSyncLogs => Set<FirebaseSyncLog>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<UserRequest> UserRequests => Set<UserRequest>();
+    public DbSet<UserFavorite> UserFavorites => Set<UserFavorite>();
+    public DbSet<UserComment> UserComments => Set<UserComment>();
+    public DbSet<UserService> UserServices => Set<UserService>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -64,5 +68,33 @@ public class AppDbContext : DbContext
             .WithMany(p => p.ServiceRequests)
             .HasForeignKey(r => r.ServiceProviderId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // UserRequest -> User (FK)
+        modelBuilder.Entity<UserRequest>()
+            .HasOne(r => r.User)
+            .WithMany()
+            .HasForeignKey(r => r.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // UserFavorite -> User (FK)
+        modelBuilder.Entity<UserFavorite>()
+            .HasOne(f => f.User)
+            .WithMany()
+            .HasForeignKey(f => f.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // UserComment -> User (FK)
+        modelBuilder.Entity<UserComment>()
+            .HasOne(c => c.User)
+            .WithMany()
+            .HasForeignKey(c => c.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // UserService -> User (FK)
+        modelBuilder.Entity<UserService>()
+            .HasOne(s => s.User)
+            .WithMany()
+            .HasForeignKey(s => s.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zoozy/components/bottom_navigation_bar.dart';
@@ -8,6 +7,7 @@ import 'package:zoozy/screens/profile_screen.dart';
 import 'package:zoozy/screens/reguests_screen.dart';
 import 'package:zoozy/screens/favori_page.dart';
 import 'package:zoozy/services/guest_access_service.dart';
+import 'package:zoozy/services/favorite_service.dart';
 
 const Color primaryPurple = Colors.deepPurple;
 
@@ -63,16 +63,19 @@ class _MomentsScreenState extends State<MomentsScreen> {
   }
 
   Future<void> _favorileriYukle() async {
-    final prefs = await SharedPreferences.getInstance();
-    final favStrings = prefs.getStringList("favoriler") ?? [];
-    final mevcutIsimler = favStrings.map((e) {
-      final decoded = jsonDecode(e);
-      return decoded["title"] as String;
-    }).toSet();
-
-    setState(() {
-      favoriIsimleri = mevcutIsimler;
-    });
+    try {
+      final favoriteService = FavoriteService();
+      final favorites = await favoriteService.getUserFavorites(tip: "moments");
+      final mevcutIsimler = favorites.map((f) => f.title).toSet();
+      setState(() {
+        favoriIsimleri = mevcutIsimler;
+      });
+    } catch (e) {
+      print('Favori yükleme hatası: $e');
+      setState(() {
+        favoriIsimleri = <String>{};
+      });
+    }
   }
 
   Future<void> _loadCurrentUserName() async {

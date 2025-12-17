@@ -25,6 +25,7 @@ import 'package:zoozy/screens/my_badgets_screen.dart';
 import 'package:zoozy/screens/my_cities_page.dart';
 import 'package:zoozy/screens/owner_Login_Page.dart';
 import 'package:zoozy/screens/password_forgot_screen.dart';
+import 'package:zoozy/screens/reset_password_confirm_screen.dart';
 import 'package:zoozy/screens/profile_screen.dart';
 import 'package:zoozy/screens/reguests_screen.dart';
 import 'package:zoozy/screens/service_name_page.dart';
@@ -120,8 +121,13 @@ class MyApp extends StatelessWidget {
       ),
 */
       routes: {
-       
         '/confirmPhone': (context) => const ConfirmPhoneScreen(),
+        '/reset-password': (context) {
+          final args = ModalRoute.of(context)!.settings.arguments
+              as Map<String, dynamic>?;
+          final token = args?['token'] as String? ?? '';
+          return ResetPasswordConfirmScreen(token: token);
+        },
         //   Diğer sayfalar gerektiğinde buraya eklenebilir
       },
     );

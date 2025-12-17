@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 class RequestItem {
+  final int? id; // Backend ID for deletion
   final String petName;
   final String serviceName;
   final String userPhoto;
@@ -11,6 +12,7 @@ class RequestItem {
   final String location;
 
   RequestItem({
+    this.id,
     required this.petName,
     required this.serviceName,
     required this.userPhoto,
@@ -22,6 +24,7 @@ class RequestItem {
   });
 
   Map<String, dynamic> toJson() => {
+        if (id != null) 'id': id,
         'petName': petName,
         'serviceName': serviceName,
         'userPhoto': userPhoto,
@@ -32,6 +35,7 @@ class RequestItem {
         'location': location,
       };
 factory RequestItem.fromJson(Map<String, dynamic> json) => RequestItem(
+  id: json['id'],
   petName: json['petName'] ?? '',
   serviceName: json['serviceName'] ?? '', // ⭐ KRİTİK
   userPhoto: json['userPhoto'] ?? '',

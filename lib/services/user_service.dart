@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:zoozy/models/user_model.dart';
+import '../config/api_config.dart';
 
 class UserService {
-  static const String baseUrl = "http://192.168.211.149:5001/api/users";
+  static String get baseUrl => ApiConfig.usersUrl;
 
   // -------------------------------------------------------------
   // 🔥 Kullanıcı var mı?

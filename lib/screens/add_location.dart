@@ -326,7 +326,7 @@ class _AddLocationState extends State<AddLocation> {
                               ),
                               GestureDetector(
                                 // AddLocation: "İLERİ" butonunun onTap içi — mevcut onTap ile değiştir
-                                onTap: () {
+                                onTap: () async {
                                   // 1) Adresi önce kaydet
                                   _saveLocation();
 
@@ -362,9 +362,45 @@ class _AddLocationState extends State<AddLocation> {
                                     return;
                                   }
 
-                                  // 5) Provider'a ekle (provider.fullAddress daha önce _saveLocation ile set edilmiş olmalı)
-                                  provider.addService(
-                                      serviceName, provider.fullAddress);
+                                  // 5) Backend'e kaydet (finalizeService)
+                                  if (provider.fullAddress.isEmpty) {
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Adres seçilmedi. Lütfen bir adres seçin.'),
+                                          backgroundColor: Colors.red),
+                                    );
+                                    return;
+                                  }
+
+                                  // Loading göster
+                                  if (!mounted) return;
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (context) => const Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  );
+
+                                  // Backend'e kaydet
+                                  final success = await provider
+                                      .finalizeService(provider.fullAddress);
+
+                                  if (!mounted) return;
+                                  Navigator.pop(
+                                      context); // Loading dialog'u kapat
+
+                                  if (!success) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Hizmet kaydedilirken bir hata oluştu. Lütfen tekrar deneyin.'),
+                                          backgroundColor: Colors.red),
+                                    );
+                                    return;
+                                  }
 
                                   // 6) Sonraki ekrana git (argları olduğu gibi geç)
                                   String petName = args?['petName'] ?? '';

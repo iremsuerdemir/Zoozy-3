@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:zoozy/services/auth_service.dart';
 
 // --- Sabit Renkler ---
 const Color kAnaMor = Color(0xFF8C60A8);
@@ -8,7 +8,9 @@ const Color kKoyuYazi = Color(0xFF4C4C4C);
 
 // --- ForgotPassword Widget (Kullanıcının sağladığı kod) ---
 class ForgotPassword extends StatefulWidget {
-  const ForgotPassword({super.key});
+  final String? initialEmail;
+  
+  const ForgotPassword({super.key, this.initialEmail});
 
   @override
   State<ForgotPassword> createState() => _ForgotPasswordState();
@@ -16,7 +18,14 @@ class ForgotPassword extends StatefulWidget {
 
 class _ForgotPasswordState extends State<ForgotPassword> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _emailController = TextEditingController();
+  late final TextEditingController _emailController;
+  final AuthService _authService = AuthService();
+  
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.initialEmail ?? '');
+  }
 
   // Yükleme durumunu yönetmek için
   bool _isLoading = false;
@@ -99,21 +108,23 @@ class _ForgotPasswordState extends State<ForgotPassword> {
     });
 
     try {
-      // Firebase Auth metodu çağrılıyor
-      await FirebaseAuth.instance.sendPasswordResetEmail(
-        email: _emailController.text.trim(),
-      );
+      // Backend API ile şifre sıfırlama
+      final response = await _authService.resetPassword(_emailController.text.trim());
 
-      // Başarılı olduğunda dialog göster
-      if (mounted) {
+      if (!mounted) return;
+
+      if (response.success) {
+        // Başarılı olduğunda dialog göster
         showDialog(
           context: context,
           barrierDismissible: false,
           builder: (BuildContext context) {
             return AlertDialog(
               title: const Text('Şifre Sıfırlama'),
-              content: const Text(
-                'Şifre sıfırlama linki e-posta adresinize gönderildi.\n\nLütfen gelen kutunuzu kontrol edin ve linke tıklayın.',
+              content: Text(
+                response.message.isEmpty
+                    ? 'Yeni şifreniz e-posta adresinize gönderilmiştir.\n\nLütfen gelen kutunuzu kontrol edin.'
+                    : response.message,
               ),
               actions: [
                 TextButton(
@@ -127,28 +138,22 @@ class _ForgotPasswordState extends State<ForgotPassword> {
             );
           },
         );
+      } else {
+        // Hata mesajını göster
+        _gosterMesaj(response.message.isNotEmpty 
+            ? response.message 
+            : 'Şifre sıfırlama işlemi başarısız oldu.', 
+        Colors.red);
       }
-    } on FirebaseAuthException catch (e) {
-      // Hata yakalama ve kullanıcıya özel mesaj gösterme
-      String hataMesaji;
-
-      switch (e.code) {
-        case 'user-not-found':
-          hataMesaji = 'Bu e-posta adresiyle kayıtlı bir kullanıcı bulunamadı.';
-          break;
-        case 'invalid-email':
-          hataMesaji = 'Lütfen geçerli bir e-posta adresi girin.';
-          break;
-        case 'firebase_auth/network-request-failed':
-        case 'network-request-failed':
-          hataMesaji = 'İnternet bağlantınızı kontrol edin.';
-          break;
-        default:
-          hataMesaji = 'Bir hata oluştu: ${e.message ?? 'Bilinmeyen Hata'}';
-          break;
+    } catch (e) {
+      // Genel hata yakalama
+      String hataMesaji = 'Bir hata oluştu: ${e.toString()}';
+      
+      if (e.toString().contains('network') || e.toString().contains('connection')) {
+        hataMesaji = 'İnternet bağlantınızı kontrol edin.';
       }
 
-      _gosterMesaj(hataMesaji, Colors.red); // Hata mesajını kırmızı göster
+      _gosterMesaj(hataMesaji, Colors.red);
     } finally {
       // İşlem bittiğinde yükleme durumunu kapat
       if (mounted) {

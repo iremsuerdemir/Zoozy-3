@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zoozy/models/favori_item.dart';
 import 'package:zoozy/services/guest_access_service.dart';
+import 'package:zoozy/services/favorite_service.dart';
 
 // Tema Renkleri
 const Color _primaryColor = Colors.deepPurple;
@@ -30,13 +30,12 @@ class CaregiverCardBalanced extends StatefulWidget {
 }
 
 class _CaregiverCardBalancedState extends State<CaregiverCardBalanced> {
+  final FavoriteService _favoriteService = FavoriteService();
+
   Future<void> _toggleFavorite() async {
     if (!await GuestAccessService.ensureLoggedIn(context)) {
       return;
     }
-
-    final prefs = await SharedPreferences.getInstance();
-    List<String> mevcutFavoriler = prefs.getStringList("favoriler") ?? [];
 
     final item = FavoriteItem(
       title: widget.name,
@@ -46,26 +45,39 @@ class _CaregiverCardBalancedState extends State<CaregiverCardBalanced> {
       tip: "caregiver",
     );
 
-    bool zatenFavoride = mevcutFavoriler.any((f) {
-      final decoded = jsonDecode(f);
-      return decoded["title"] == item.title && decoded["tip"] == item.tip;
-    });
+    bool isFavorite = await _favoriteService.isFavorite(
+      title: item.title,
+      tip: item.tip,
+      imageUrl: item.imageUrl,
+    );
 
-    if (zatenFavoride) {
-      mevcutFavoriler.removeWhere((f) {
-        final decoded = jsonDecode(f);
-        return decoded["title"] == item.title && decoded["tip"] == item.tip;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Favorilerden çıkarıldı.")));
+    bool success;
+    String message;
+
+    if (isFavorite) {
+      success = await _favoriteService.removeFavorite(
+        title: item.title,
+        tip: item.tip,
+        imageUrl: item.imageUrl,
+      );
+      message = success
+          ? "Favorilerden çıkarıldı."
+          : "Favoriden çıkarılırken bir hata oluştu.";
     } else {
-      mevcutFavoriler.add(jsonEncode(item.toJson()));
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Favorilere eklendi!")));
+      success = await _favoriteService.addFavorite(item);
+      message = success
+          ? "Favorilere eklendi!"
+          : "Favori eklenirken bir hata oluştu.";
     }
 
-    await prefs.setStringList("favoriler", mevcutFavoriler);
-    widget.onFavoriteChanged?.call();
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+
+    if (success) {
+      widget.onFavoriteChanged?.call();
+    }
   }
 
   @override
