@@ -4,6 +4,7 @@ using ZoozyApi.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.UseUrls("http://0.0.0.0:5001");
 
 
 // Ortam değişkenleri
@@ -68,7 +69,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 
 // Lokal geliştirme HTTPS kullanmıyorsan sorun olmaz
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection();
 
 app.UseAuthorization();
 
