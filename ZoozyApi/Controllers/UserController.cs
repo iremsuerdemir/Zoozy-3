@@ -64,6 +64,13 @@ namespace ZoozyApi.Controllers
 
             var user = await _db.Users.FirstOrDefaultAsync(x => x.FirebaseUid == dto.FirebaseUid);
 
+            // PhotoUrl'ü normalize et: null veya sadece boşluk ise NULL kaydet
+            string? normalizedPhotoUrl = null;
+            if (!string.IsNullOrWhiteSpace(dto.PhotoUrl))
+            {
+                normalizedPhotoUrl = dto.PhotoUrl!.Trim();
+            }
+
             if (user == null)
             {
                 // Yeni kullanıcı oluştur
@@ -72,7 +79,7 @@ namespace ZoozyApi.Controllers
                     FirebaseUid = dto.FirebaseUid,
                     Email = dto.Email,
                     DisplayName = dto.DisplayName,
-                    PhotoUrl = dto.PhotoUrl,
+                    PhotoUrl = normalizedPhotoUrl,
                     Provider = dto.Provider,
                     CreatedAt = DateTime.Now
                 };
@@ -84,7 +91,7 @@ namespace ZoozyApi.Controllers
                 // Var olan kullanıcı güncelle
                 user.Email = dto.Email;
                 user.DisplayName = dto.DisplayName;
-                user.PhotoUrl = dto.PhotoUrl;
+                user.PhotoUrl = normalizedPhotoUrl;
                 user.Provider = dto.Provider;
                 user.UpdatedAt = DateTime.Now;
 
@@ -120,12 +127,19 @@ namespace ZoozyApi.Controllers
                 return Conflict(new { message = "User already exists" }); // 409
             }
 
+            // PhotoUrl'ü normalize et: null veya sadece boşluk ise NULL kaydet
+            string? normalizedPhotoUrl = null;
+            if (!string.IsNullOrWhiteSpace(dto.PhotoUrl))
+            {
+                normalizedPhotoUrl = dto.PhotoUrl!.Trim();
+            }
+
             var newUser = new User
             {
                 FirebaseUid = dto.FirebaseUid,
                 Email = dto.Email,
                 DisplayName = dto.DisplayName,
-                PhotoUrl = dto.PhotoUrl,
+                PhotoUrl = normalizedPhotoUrl,
                 Provider = dto.Provider,
                 CreatedAt = DateTime.Now
             };

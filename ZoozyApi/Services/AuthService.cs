@@ -209,6 +209,13 @@ namespace ZoozyApi.Services
                     };
                 }
 
+                // PhotoUrl'ü normalize et: null veya sadece boşluk ise NULL kaydet
+                string? normalizedPhotoUrl = null;
+                if (!string.IsNullOrWhiteSpace(request.PhotoUrl))
+                {
+                    normalizedPhotoUrl = request.PhotoUrl!.Trim();
+                }
+
                 // Var mı kontrol et (FirebaseUid ile)
                 var existingUser = await _context.Users
                     .FirstOrDefaultAsync(u => u.FirebaseUid == request.FirebaseUid);
@@ -218,8 +225,12 @@ namespace ZoozyApi.Services
                     existingUser.UpdatedAt = DateTime.UtcNow;
                     // Profil güncelleme
                     existingUser.DisplayName = request.DisplayName;
-                    existingUser.PhotoUrl = request.PhotoUrl;
-                    
+                    // Sadece geçerli bir PhotoUrl geldiyse güncelle, aksi halde eski resmi koru
+                    if (normalizedPhotoUrl != null)
+                    {
+                        existingUser.PhotoUrl = normalizedPhotoUrl;
+                    }
+
                     _context.Users.Update(existingUser);
                     await _context.SaveChangesAsync();
 
@@ -243,9 +254,13 @@ namespace ZoozyApi.Services
                     emailUser.FirebaseUid = request.FirebaseUid;
                     emailUser.Provider = "google";
                     emailUser.DisplayName = request.DisplayName;
-                    emailUser.PhotoUrl = request.PhotoUrl;
+                    // Sadece geçerli bir PhotoUrl geldiyse güncelle
+                    if (normalizedPhotoUrl != null)
+                    {
+                        emailUser.PhotoUrl = normalizedPhotoUrl;
+                    }
                     emailUser.UpdatedAt = DateTime.UtcNow;
-                    
+
                     _context.Users.Update(emailUser);
                     await _context.SaveChangesAsync();
 
@@ -265,7 +280,7 @@ namespace ZoozyApi.Services
                     FirebaseUid = request.FirebaseUid,
                     Email = request.Email.ToLower(),
                     DisplayName = request.DisplayName,
-                    PhotoUrl = request.PhotoUrl,
+                    PhotoUrl = normalizedPhotoUrl,
                     Provider = "google",
                     CreatedAt = DateTime.UtcNow,
                     IsActive = true

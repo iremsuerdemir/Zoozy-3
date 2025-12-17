@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zoozy/models/favori_item.dart';
@@ -277,14 +279,47 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
                   itemCount: users.length,
                   itemBuilder: (context, index) {
                     final user = users[index];
+                    final String? avatar = user['photoUrl'] as String?;
+
+                    ImageProvider<Object>? _resolveAvatar(String? avatar) {
+                      if (avatar == null || avatar.isEmpty) return null;
+                      try {
+                        // Base64: data:image/...;base64,XXXX
+                        if (avatar.startsWith('data:image/')) {
+                          final base64Index = avatar.indexOf('base64,');
+                          if (base64Index != -1) {
+                            final base64Str = avatar.substring(base64Index + 7);
+                            final bytes = base64Decode(base64Str);
+                            return MemoryImage(bytes);
+                          }
+                        }
+                        // Eski base64: base64:XXXX
+                        if (avatar.startsWith('base64:')) {
+                          final base64Str = avatar.substring(7);
+                          final bytes = base64Decode(base64Str);
+                          return MemoryImage(bytes);
+                        }
+                        // URL
+                        if (avatar.startsWith('http://') ||
+                            avatar.startsWith('https://')) {
+                          return NetworkImage(avatar);
+                        }
+                        // Asset
+                        final assetPath = avatar.startsWith('asset:')
+                            ? avatar.substring(6)
+                            : avatar;
+                        return AssetImage(assetPath);
+                      } catch (e) {
+                        print(
+                            '⚠️ Beğenenler avatar yükleme hatası: $e, avatar: ${avatar.length > 50 ? avatar.substring(0, 50) : avatar}');
+                        return null;
+                      }
+                    }
+
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundImage: user['photoUrl'] != null &&
-                                user['photoUrl'].toString().isNotEmpty
-                            ? AssetImage(user['photoUrl'] as String)
-                            : null,
-                        child: user['photoUrl'] == null ||
-                                (user['photoUrl'] as String).isEmpty
+                        backgroundImage: _resolveAvatar(avatar),
+                        child: (avatar == null || avatar.isEmpty)
                             ? const Icon(Icons.person)
                             : null,
                       ),

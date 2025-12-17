@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:zoozy/components/bottom_navigation_bar.dart';
 import 'package:zoozy/screens/agreement_screen.dart';
@@ -196,6 +198,44 @@ class _JobsScreenState extends State<JobsScreen> {
     final userDisplayName = job['userDisplayName'] ?? 'Kullanıcı';
     final userPhotoUrl = job['userPhotoUrl'];
 
+    ImageProvider<Object>? _resolveUserAvatar(String? avatar) {
+      if (avatar == null || avatar.isEmpty) {
+        return null;
+      }
+
+      try {
+        // Base64 formatı: "data:image/png;base64,..." veya "data:image/jpeg;base64,..."
+        if (avatar.startsWith('data:image/')) {
+          final base64Index = avatar.indexOf('base64,');
+          if (base64Index != -1) {
+            final base64Str = avatar.substring(base64Index + 7); // "base64," = 7 karakter
+            final bytes = base64Decode(base64Str);
+            return MemoryImage(bytes);
+          }
+        }
+
+        // Base64 formatı: "base64:..." (eski format)
+        if (avatar.startsWith('base64:')) {
+          final base64Str = avatar.substring(7);
+          final bytes = base64Decode(base64Str);
+          return MemoryImage(bytes);
+        }
+
+        // HTTP/HTTPS URL formatı
+        if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
+          return NetworkImage(avatar);
+        }
+
+        // Asset formatı: "asset:..." veya direkt path
+        final assetPath =
+            avatar.startsWith('asset:') ? avatar.substring(6) : avatar;
+        return AssetImage(assetPath);
+      } catch (e) {
+        print('⚠️ JobsScreen avatar yükleme hatası: $e');
+        return null;
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -219,10 +259,8 @@ class _JobsScreenState extends State<JobsScreen> {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: primaryPurple.withOpacity(0.2),
-                backgroundImage: userPhotoUrl != null && userPhotoUrl.isNotEmpty
-                    ? NetworkImage(userPhotoUrl)
-                    : null,
-                child: userPhotoUrl == null || userPhotoUrl.isEmpty
+                backgroundImage: _resolveUserAvatar(userPhotoUrl),
+                child: (userPhotoUrl == null || userPhotoUrl.isEmpty)
                     ? const Icon(Icons.person, color: primaryPurple)
                     : null,
               ),

@@ -58,21 +58,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfileData() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      username = prefs.getString('username') ?? 'İrem Su Erdemir';
+      // İsim: önce backend ile senkronize olan displayName, sonra eski username anahtarı
+      username = prefs.getString('displayName') ??
+          prefs.getString('username') ??
+          'İrem Su Erdemir';
       email = prefs.getString('email') ?? '7692003@gmail.com';
 
-      final imageString = prefs.getString('profileImagePath');
-      if (imageString != null && imageString.isNotEmpty) {
-        try {
-          final bytes = base64Decode(imageString);
-          _profileImage = MemoryImage(bytes);
-        } catch (e) {
-          print('Profil resmi yüklenirken hata: $e');
-          _profileImage = null;
+      // 1) Tercihen backend'den gelen photoUrl (data:image... veya http url)
+      final photoUrl = prefs.getString('photoUrl');
+      final localProfileImage = prefs.getString('profileImagePath');
+
+      ImageProvider? resolvedImage;
+
+      try {
+        if (photoUrl != null && photoUrl.isNotEmpty) {
+          // data:image/png;base64,... formatı
+          if (photoUrl.startsWith('data:image/')) {
+            final base64Index = photoUrl.indexOf('base64,');
+            if (base64Index != -1) {
+              final base64Str = photoUrl.substring(base64Index + 7);
+              final bytes = base64Decode(base64Str);
+              resolvedImage = MemoryImage(bytes);
+            }
+          }
+          // Dış URL formatı
+          else if (photoUrl.startsWith('http://') ||
+              photoUrl.startsWith('https://')) {
+            resolvedImage = NetworkImage(photoUrl);
+          }
         }
-      } else {
-        _profileImage = null;
+
+        // 2) Eğer photoUrl yoksa veya çözülemediyse, eski local base64 kaydını kullan
+        if (resolvedImage == null &&
+            localProfileImage != null &&
+            localProfileImage.isNotEmpty) {
+          final bytes = base64Decode(localProfileImage);
+          resolvedImage = MemoryImage(bytes);
+        }
+      } catch (e) {
+        print('Profil resmi yüklenirken hata: $e');
+        resolvedImage = null;
       }
+
+      _profileImage = resolvedImage;
     });
   }
 

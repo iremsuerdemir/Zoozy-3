@@ -105,6 +105,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('username', _usernameController.text);
+    await prefs.setString('displayName', _usernameController.text);
     await prefs.setString('email', email);
     await prefs.setString('phone', cleanPhone);
 
