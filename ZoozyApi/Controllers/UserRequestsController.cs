@@ -34,6 +34,43 @@ public class UserRequestsController : ControllerBase
         return Ok(requests);
     }
 
+    // GET: api/UserRequests/others?excludeUserId=1
+    // Login olan kullanıcı hariç tüm kullanıcıların user request'lerini getir
+    [HttpGet("others")]
+    public async Task<ActionResult<IEnumerable<object>>> GetOtherUsersRequests([FromQuery] int excludeUserId)
+    {
+        var requests = await _context.UserRequests
+            .Where(r => r.UserId != excludeUserId)
+            .Join(
+                _context.Users,
+                request => request.UserId,
+                user => user.Id,
+                (request, user) => new
+                {
+                    Id = request.Id,
+                    UserId = request.UserId,
+                    PetName = request.PetName,
+                    ServiceName = request.ServiceName,
+                    UserPhoto = request.UserPhoto,
+                    StartDate = request.StartDate,
+                    EndDate = request.EndDate,
+                    DayDiff = request.DayDiff,
+                    Note = request.Note,
+                    Location = request.Location,
+                    CreatedAt = request.CreatedAt,
+                    UpdatedAt = request.UpdatedAt,
+                    // Kullanıcı bilgileri
+                    UserDisplayName = user.DisplayName,
+                    UserEmail = user.Email,
+                    UserPhotoUrl = user.PhotoUrl
+                }
+            )
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        return Ok(requests);
+    }
+
     // GET: api/UserRequests/5
     [HttpGet("{id}")]
     public async Task<ActionResult<UserRequest>> GetUserRequest(int id)

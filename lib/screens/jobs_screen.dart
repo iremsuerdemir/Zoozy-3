@@ -6,7 +6,7 @@ import 'package:zoozy/screens/minimal_calendar_page.dart';
 import 'package:zoozy/screens/profile_screen.dart';
 import 'package:zoozy/screens/help_center_page.dart';
 import 'package:zoozy/services/guest_access_service.dart';
-import 'package:zoozy/services/user_service_api.dart';
+import 'package:zoozy/services/request_service.dart';
 import 'package:zoozy/screens/pet_walk_page.dart';
 
 class JobsScreen extends StatefulWidget {
@@ -22,7 +22,7 @@ class _JobsScreenState extends State<JobsScreen> {
   
   // Backend'den gelen job'lar
   List<Map<String, dynamic>> _jobsList = [];
-  final UserServiceApi _userServiceApi = UserServiceApi();
+  final RequestService _requestService = RequestService();
   bool _isLoading = true;
 
   // Renk paleti
@@ -52,7 +52,7 @@ class _JobsScreenState extends State<JobsScreen> {
     });
 
     try {
-      final jobs = await _userServiceApi.getOtherUsersServices();
+      final jobs = await _requestService.getOtherUsersRequests();
       setState(() {
         _jobsList = jobs;
         _isLoading = false;
@@ -175,9 +175,24 @@ class _JobsScreenState extends State<JobsScreen> {
   /// Job kartı widget'ı
   Widget _buildJobCard(Map<String, dynamic> job) {
     final serviceName = job['serviceName'] ?? '';
-    final address = job['address'] ?? '';
-    final price = job['price'];
-    final description = job['description'];
+    final petName = job['petName'] ?? '';
+    final location = job['location'] ?? '';
+    final note = job['note'] ?? '';
+    final startDateStr = job['startDate'];
+    final endDateStr = job['endDate'];
+
+    String? dateRangeText;
+    if (startDateStr != null && endDateStr != null) {
+      try {
+        final startDate = DateTime.parse(startDateStr);
+        final endDate = DateTime.parse(endDateStr);
+        dateRangeText =
+            '${startDate.day}.${startDate.month}.${startDate.year} - ${endDate.day}.${endDate.month}.${endDate.year}';
+      } catch (_) {
+        dateRangeText = null;
+      }
+    }
+
     final userDisplayName = job['userDisplayName'] ?? 'Kullanıcı';
     final userPhotoUrl = job['userPhotoUrl'];
 
@@ -256,9 +271,9 @@ class _JobsScreenState extends State<JobsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (price != null && price.isNotEmpty)
+                    if (petName.isNotEmpty)
                       Text(
-                        'Fiyat: $price₺',
+                        'Evcil Hayvan: $petName',
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -266,13 +281,30 @@ class _JobsScreenState extends State<JobsScreen> {
                         ),
                       ),
                     const SizedBox(height: 4),
+                    if (dateRangeText != null) ...[
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today,
+                              size: 16, color: Colors.grey[600]),
+                          const SizedBox(width: 4),
+                          Text(
+                            dateRangeText,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                    ],
                     Row(
                       children: [
                         Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            address,
+                            location,
                             style: TextStyle(
                               fontSize: 13,
                               color: Colors.grey[700],
@@ -288,10 +320,10 @@ class _JobsScreenState extends State<JobsScreen> {
               ),
             ],
           ),
-          if (description != null && description.isNotEmpty) ...[
+          if (note != null && note.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
-              description,
+              note,
               style: TextStyle(
                 fontSize: 13,
                 color: Colors.grey[600],

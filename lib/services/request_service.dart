@@ -51,6 +51,45 @@ class RequestService {
     }
   }
 
+  /// Get all requests from other users (excluding current user)
+  /// JobsScreen için kullanılır
+  Future<List<Map<String, dynamic>>> getOtherUsersRequests() async {
+    try {
+      final userId = await _getCurrentUserId();
+      if (userId == null) {
+        return [];
+      }
+
+      final response = await httpClient
+          .get(Uri.parse('$baseUrl/others?excludeUserId=$userId'))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => {
+              'id': json['id'],
+              'userId': json['userId'],
+              'petName': json['petName'] ?? '',
+              'serviceName': json['serviceName'] ?? '',
+              'userPhoto': json['userPhoto'] ?? '',
+              'startDate': json['startDate'],
+              'endDate': json['endDate'],
+              'dayDiff': json['dayDiff'] ?? 0,
+              'note': json['note'] ?? '',
+              'location': json['location'] ?? '',
+              // Kullanıcı bilgileri
+              'userDisplayName': json['userDisplayName'] ?? '',
+              'userEmail': json['userEmail'] ?? '',
+              'userPhotoUrl': json['userPhotoUrl'],
+            }).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Diğer kullanıcı requestleri yükleme hatası: $e');
+      return [];
+    }
+  }
+
   /// Create a new request
   Future<bool> createRequest(RequestItem request) async {
     try {
