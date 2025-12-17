@@ -559,7 +559,9 @@ C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\ZoozyApi.pdb
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Azure.Core.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Azure.Identity.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\BCrypt.Net-Next.dll
+C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\BouncyCastle.Cryptography.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Humanizer.dll
+C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\MailKit.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Microsoft.AspNetCore.OpenApi.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Microsoft.Bcl.AsyncInterfaces.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Microsoft.CodeAnalysis.dll
@@ -584,6 +586,7 @@ C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Microsoft.IdentityModel
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Microsoft.OpenApi.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Microsoft.SqlServer.Server.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Microsoft.Win32.SystemEvents.dll
+C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\MimeKit.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Mono.TextTemplating.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Swashbuckle.AspNetCore.Swagger.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\Swashbuckle.AspNetCore.SwaggerGen.dll
@@ -688,6 +691,3 @@ C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\obj\Debug\net8.0\refint\ZoozyApi.dll
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\obj\Debug\net8.0\ZoozyApi.pdb
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\obj\Debug\net8.0\ZoozyApi.genruntimeconfig.cache
 C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\obj\Debug\net8.0\ref\ZoozyApi.dll
-C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\BouncyCastle.Cryptography.dll
-C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\MailKit.dll
-C:\Users\erdem\Desktop\Zoozy-3\ZoozyApi\bin\Debug\net8.0\MimeKit.dll

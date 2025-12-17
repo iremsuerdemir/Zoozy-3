@@ -69,4 +69,54 @@ class UserService {
 
     return null;
   }
+
+  // -------------------------------------------------------------
+  // 🔄 Kullanıcı profil güncelleme (PhotoUrl dahil)
+  // PUT: api/users/{id}
+  // -------------------------------------------------------------
+  Future<bool> updateUserProfile({
+    required int userId,
+    String? displayName,
+    String? photoUrl,
+  }) async {
+    try {
+      final url = Uri.parse("$baseUrl/$userId");
+
+      final body = <String, dynamic>{};
+      if (displayName != null && displayName.trim().isNotEmpty) {
+        body['displayName'] = displayName.trim();
+      }
+      // Sadece geçerli base64 string gönder
+      if (photoUrl != null &&
+          photoUrl.trim().isNotEmpty &&
+          photoUrl.trim().startsWith('data:image')) {
+        body['photoUrl'] = photoUrl.trim();
+        print('📤 PhotoUrl gönderiliyor (uzunluk: ${photoUrl.length})');
+      } else if (photoUrl != null) {
+        print(
+            '⚠️ Geçersiz PhotoUrl formatı, gönderilmiyor: ${photoUrl.substring(0, photoUrl.length > 50 ? 50 : photoUrl.length)}');
+      }
+
+      if (body.isEmpty) {
+        print('⚠️ Güncellenecek alan yok');
+        return false;
+      }
+
+      print('📤 Backend\'e gönderiliyor: $body');
+
+      final response = await http.put(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      print(
+          '📥 Backend yanıtı: Status ${response.statusCode}, Body: ${response.body}');
+
+      return response.statusCode == 200;
+    } catch (e) {
+      print('❌ Profil güncelleme hatası: $e');
+      return false;
+    }
+  }
 }

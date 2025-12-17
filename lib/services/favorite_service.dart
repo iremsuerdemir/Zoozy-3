@@ -132,5 +132,62 @@ class FavoriteService {
       return false;
     }
   }
+
+  /// Get favorite count for a specific item
+  Future<int> getFavoriteCount({
+    required String title,
+    required String tip,
+    String? imageUrl,
+  }) async {
+    try {
+      var url = '$baseUrl/count?title=${Uri.encodeComponent(title)}&tip=${Uri.encodeComponent(tip)}';
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        url += '&imageUrl=${Uri.encodeComponent(imageUrl)}';
+      }
+
+      final response = await httpClient
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        return int.parse(response.body);
+      }
+      return 0;
+    } catch (e) {
+      print('Favori sayısı alma hatası: $e');
+      return 0;
+    }
+  }
+
+  /// Get all users who favorited a specific item
+  Future<List<Map<String, dynamic>>> getFavoriteUsers({
+    required String title,
+    required String tip,
+    String? imageUrl,
+  }) async {
+    try {
+      var url = '$baseUrl/users?title=${Uri.encodeComponent(title)}&tip=${Uri.encodeComponent(tip)}';
+      if (imageUrl != null && imageUrl.isNotEmpty) {
+        url += '&imageUrl=${Uri.encodeComponent(imageUrl)}';
+      }
+
+      final response = await httpClient
+          .get(Uri.parse(url))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => {
+          'userId': json['userId'],
+          'displayName': json['displayName'] ?? 'Bilinmeyen Kullanıcı',
+          'photoUrl': json['photoUrl'],
+        }).toList();
+      }
+      return [];
+    } catch (e) {
+      print('Favori kullanıcıları alma hatası: $e');
+      return [];
+    }
+  }
 }
 

@@ -27,7 +27,7 @@ public class UserComment
     [MaxLength(200)]
     public string AuthorName { get; set; } = string.Empty;
     
-    [MaxLength(1000)]
+    // AuthorAvatar base64 string olabilir, bu yüzden MaxLength kaldırıldı (NVARCHAR(MAX) kullanılacak)
     public string? AuthorAvatar { get; set; }
     
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

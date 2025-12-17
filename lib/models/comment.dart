@@ -4,7 +4,8 @@ class Comment {
   final int rating; // 1-5 arası yıldız
   final DateTime createdAt;
   final String authorName;
-  final String authorAvatar;
+  final String? authorAvatar;
+  final String? userId; // Yorum sahibinin userId'si
 
   Comment({
     required this.id,
@@ -12,7 +13,8 @@ class Comment {
     required this.rating,
     required this.createdAt,
     required this.authorName,
-    required this.authorAvatar,
+    this.authorAvatar,
+    this.userId,
   });
 
   Map<String, dynamic> toJson() {
@@ -22,7 +24,8 @@ class Comment {
       'rating': rating,
       'createdAt': createdAt.toIso8601String(),
       'authorName': authorName,
-      'authorAvatar': authorAvatar,
+      'authorAvatar': authorAvatar ?? '',
+      'userId': userId ?? '',
     };
   }
 
@@ -33,7 +36,8 @@ class Comment {
       rating: json['rating'],
       createdAt: DateTime.parse(json['createdAt']),
       authorName: json['authorName'],
-      authorAvatar: json['authorAvatar'],
+      authorAvatar: json['authorAvatar'] as String?,
+      userId: json['userId'] as String?,
     );
   }
 }

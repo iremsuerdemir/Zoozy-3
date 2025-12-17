@@ -65,8 +65,8 @@ namespace ZoozyApi.Services
                     };
                 }
 
-                // Şifre hash'le (BCrypt)
-                string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+                // Şifre hash'le (BCrypt) - Trim yaparak tutarlılık sağla
+                string passwordHash = BCrypt.Net.BCrypt.HashPassword(request.Password.Trim());
 
                 var newUser = new User
                 {
@@ -142,9 +142,20 @@ namespace ZoozyApi.Services
         }
 
         // 🔐 Şifre doğrula (local kullanıcı)
+        // PasswordHash null veya boş ise hata döndür
+        if (string.IsNullOrEmpty(user.PasswordHash))
+        {
+            _logger.LogWarning($"Kullanıcı şifre hash'i yok: {user.Email}");
+            return new AuthResponse
+            {
+                Success = false,
+                Message = "Email veya şifre yanlış."
+            };
+        }
+
         bool isValidPassword = BCrypt.Net.BCrypt.Verify(
             request.Password.Trim(),
-            user.PasswordHash ?? ""
+            user.PasswordHash
         );
 
         if (!isValidPassword)

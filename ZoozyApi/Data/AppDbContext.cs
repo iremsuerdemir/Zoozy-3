@@ -90,6 +90,11 @@ public class AppDbContext : DbContext
             .HasForeignKey(c => c.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // AuthorAvatar için NVARCHAR(MAX) kullan (base64 string çok uzun olabilir)
+        modelBuilder.Entity<UserComment>()
+            .Property(c => c.AuthorAvatar)
+            .HasColumnType("nvarchar(max)");
+
         // UserService -> User (FK)
         modelBuilder.Entity<UserService>()
             .HasOne(s => s.User)

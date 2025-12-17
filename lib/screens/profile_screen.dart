@@ -33,7 +33,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadProfileData();
-    _loadServices();
+    // Build tamamlandıktan sonra çağır (setState during build hatasını önlemek için)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadServices();
+    });
   }
 
   Future<void> _loadServices() async {

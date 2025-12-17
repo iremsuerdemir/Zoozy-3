@@ -130,5 +130,53 @@ public class UserFavoritesController : ControllerBase
 
         return NoContent();
     }
+
+    // GET: api/UserFavorites/count?title=xxx&tip=moments&imageUrl=xxx
+    [HttpGet("count")]
+    public async Task<ActionResult<int>> GetFavoriteCount(
+        [FromQuery] string title,
+        [FromQuery] string tip,
+        [FromQuery] string? imageUrl = null)
+    {
+        var query = _context.UserFavorites
+            .Where(f => f.Title == title && f.Tip == tip);
+
+        if (!string.IsNullOrEmpty(imageUrl))
+        {
+            query = query.Where(f => f.ImageUrl == imageUrl);
+        }
+
+        var count = await query.CountAsync();
+        return Ok(count);
+    }
+
+    // GET: api/UserFavorites/users?title=xxx&tip=moments&imageUrl=xxx
+    [HttpGet("users")]
+    public async Task<ActionResult<IEnumerable<object>>> GetFavoriteUsers(
+        [FromQuery] string title,
+        [FromQuery] string tip,
+        [FromQuery] string? imageUrl = null)
+    {
+        var query = _context.UserFavorites
+            .Include(f => f.User)
+            .Where(f => f.Title == title && f.Tip == tip);
+
+        if (!string.IsNullOrEmpty(imageUrl))
+        {
+            query = query.Where(f => f.ImageUrl == imageUrl);
+        }
+
+        var favorites = await query
+            .OrderByDescending(f => f.CreatedAt)
+            .Select(f => new
+            {
+                userId = f.UserId,
+                displayName = f.User != null ? f.User.DisplayName : "Bilinmeyen Kullanıcı",
+                photoUrl = f.User != null ? f.User.PhotoUrl : null
+            })
+            .ToListAsync();
+
+        return Ok(favorites);
+    }
 }
 

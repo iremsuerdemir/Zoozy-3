@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:zoozy/services/user_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({Key? key}) : super(key: key);
@@ -24,6 +25,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   File? _image;
   Uint8List? _webImage;
   final ImagePicker _picker = ImagePicker();
+  final UserService _userService = UserService();
 
   Color _emailFieldColor = Colors.grey[100]!;
   Color _phoneFieldColor = Colors.grey[100]!;
@@ -123,6 +125,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         final file = File(p.join(appDir.path, 'profile_image.png'));
         await file.writeAsBytes(imageBytes);
         _image = file;
+      }
+
+      // Backend'e profil resmini kaydet
+      final userId = prefs.getInt('userId');
+      if (userId != null) {
+        // Base64 formatında backend'e gönder (data:image/png;base64,... formatı)
+        // Sadece imageString boş değilse gönder
+        if (imageString.isNotEmpty) {
+          final photoUrl = 'data:image/png;base64,$imageString';
+          print(
+              '📤 Profil resmi backend\'e gönderiliyor (uzunluk: ${photoUrl.length})');
+
+          final success = await _userService.updateUserProfile(
+            userId: userId,
+            displayName: _usernameController.text.trim(),
+            photoUrl: photoUrl,
+          );
+
+          if (success) {
+            // Backend'deki PhotoUrl'i SharedPreferences'a da kaydet
+            await prefs.setString('photoUrl', photoUrl);
+            print('✅ Profil resmi backend\'e kaydedildi');
+          } else {
+            print('⚠️ Profil resmi backend\'e kaydedilemedi');
+          }
+        } else {
+          print('⚠️ Profil resmi boş, backend\'e gönderilmiyor');
+        }
+      }
+    } else {
+      // Sadece isim güncellendi, resim yok
+      final userId = prefs.getInt('userId');
+      if (userId != null) {
+        await _userService.updateUserProfile(
+          userId: userId,
+          displayName: _usernameController.text.trim(),
+        );
       }
     }
 

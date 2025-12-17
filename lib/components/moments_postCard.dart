@@ -1,5 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zoozy/models/favori_item.dart';
 import 'package:zoozy/models/comment.dart';
 import 'package:zoozy/services/comment_service_http.dart';
@@ -40,50 +40,94 @@ class MomentsPostCard extends StatefulWidget {
 
 class _MomentsPostCardState extends State<MomentsPostCard> {
   bool isFavorite = false;
-  late int likeCount;
+  int likeCount = 0;
   final CommentServiceHttp _commentService = CommentServiceHttp();
   final FavoriteService _favoriteService = FavoriteService();
   List<Comment> _comments = [];
   bool _showComments = false;
-  bool _isLoadingComments = false;
+  int? _currentUserId; // Mevcut kullanıcının userId'si
 
   @override
   void initState() {
     super.initState();
-    likeCount = widget.likes;
+    _loadCurrentUserId();
     _checkIfFavorite();
+    _loadLikeCount();
     _loadComments();
+    // DEBUG: Tüm yorumları kontrol et
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _commentService.debugGetAllComments();
+      if (mounted) {
+        setState(() {
+          _showComments = true;
+        });
+      }
+    });
+  }
+
+  Future<void> _loadCurrentUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getInt('userId');
+    if (mounted) {
+      setState(() {
+        _currentUserId = userId;
+      });
+    }
   }
 
   Future<void> _loadComments() async {
     // Moment kartı için unique cardId kullanıyoruz
+    // TÜM KULLANICILARIN yorumlarını backend'den çekiyoruz
     final cardId =
         "moment_${widget.userName}_${widget.timePosted.millisecondsSinceEpoch}";
-    setState(() {
-      _isLoadingComments = true;
-    });
 
     try {
-      final comments = await _commentService.getCommentsForCard(cardId);
-      setState(() {
-        _comments = comments;
-        _isLoadingComments = false;
-      });
+      print(
+          'Yorumlar yükleniyor, cardId: $cardId, userName: ${widget.userName}');
+      // userName parametresini de gönder (cardId bulunamazsa userName ile filtreleme için)
+      final comments = await _commentService.getCommentsForCard(cardId,
+          userName: widget.userName);
+      print('Yüklenen yorum sayısı: ${comments.length}');
+      if (mounted) {
+        setState(() {
+          _comments = comments;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isLoadingComments = false;
-      });
       print('Yorum yükleme hatası: $e');
+      // Hata durumunda da mounted kontrolü yap
+      if (mounted) {
+        setState(() {
+          _comments = [];
+        });
+      }
     }
   }
 
   Future<void> _onCommentAdded(Comment comment) async {
     final cardId =
         "moment_${widget.userName}_${widget.timePosted.millisecondsSinceEpoch}";
+
+    print('📝 Yorum ekleniyor, cardId: $cardId');
     final success = await _commentService.addComment(cardId, comment);
+
     if (success) {
+      print('✅ Yorum başarıyla eklendi, yorumlar yeniden yükleniyor...');
+      // Yorum eklendikten sonra TÜM KULLANICILARIN yorumlarını yeniden yükle
+      // Kısa bir gecikme ekle (backend'in kaydetmesi için)
+      await Future.delayed(const Duration(milliseconds: 500));
       await _loadComments();
+
+      // Yorumları göster
+      if (mounted) {
+        setState(() {
+          _showComments = true;
+        });
+        print(
+            '✅ Yorumlar gösteriliyor, toplam yorum sayısı: ${_comments.length}');
+      }
     } else {
+      print('❌ Yorum eklenemedi!');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Yorum eklenirken bir hata oluştu.')),
@@ -93,9 +137,60 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
   }
 
   void _toggleComments() {
-    setState(() {
-      _showComments = !_showComments;
-    });
+    if (mounted) {
+      setState(() {
+        _showComments = !_showComments;
+      });
+    }
+  }
+
+  Future<void> _deleteComment(Comment comment) async {
+    try {
+      final commentId = int.tryParse(comment.id);
+      if (commentId == null) {
+        print('❌ Geçersiz yorum ID: ${comment.id}');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Yorum silinirken bir hata oluştu.')),
+          );
+        }
+        return;
+      }
+
+      print('🗑️ Yorum siliniyor: $commentId');
+      final success = await _commentService.deleteComment(commentId);
+
+      if (success) {
+        print('✅ Yorum başarıyla silindi, yorumlar yeniden yükleniyor...');
+        // Yorum silindikten sonra yorumları yeniden yükle
+        await _loadComments();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Yorum başarıyla silindi.')),
+          );
+        }
+      } else {
+        print('❌ Yorum silinemedi!');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Yorum silinirken bir hata oluştu.')),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Yorum silme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Yorum silinirken bir hata oluştu.')),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    // Widget dispose edildiğinde async işlemlerin setState çağırmasını önle
+    super.dispose();
   }
 
   Future<void> _checkIfFavorite() async {
@@ -105,22 +200,132 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
       imageUrl: widget.postImage,
     );
 
-    setState(() {
-      isFavorite = exists;
-    });
+    if (mounted) {
+      setState(() {
+        isFavorite = exists;
+      });
+    }
+  }
+
+  Future<void> _loadLikeCount() async {
+    try {
+      final count = await _favoriteService.getFavoriteCount(
+        title: widget.displayName,
+        tip: "moments",
+        imageUrl: widget.postImage,
+      );
+      if (mounted) {
+        setState(() {
+          likeCount = count;
+        });
+      }
+    } catch (e) {
+      print('Beğeni sayısı yükleme hatası: $e');
+    }
+  }
+
+  Future<void> _showFavoriteUsers() async {
+    try {
+      // TÜM KULLANICILARIN favorilerini backend'den çek
+      // Bu liste hem kendi hem de başkalarının favorilerini içerir
+      final users = await _favoriteService.getFavoriteUsers(
+        title: widget.displayName,
+        tip: "moments",
+        imageUrl: widget.postImage,
+      );
+
+      if (!mounted) return;
+
+      if (users.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Henüz kimse beğenmemiş.')),
+        );
+        return;
+      }
+
+      showModalBottomSheet(
+        context: context,
+        builder: (context) => Container(
+          padding: const EdgeInsets.all(16),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Beğenenler',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '${users.length} kişi',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: users.length,
+                  itemBuilder: (context, index) {
+                    final user = users[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundImage: user['photoUrl'] != null &&
+                                user['photoUrl'].toString().isNotEmpty
+                            ? AssetImage(user['photoUrl'] as String)
+                            : null,
+                        child: user['photoUrl'] == null ||
+                                (user['photoUrl'] as String).isEmpty
+                            ? const Icon(Icons.person)
+                            : null,
+                      ),
+                      title: Text(user['displayName'] as String),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      print('Beğenen kullanıcıları gösterme hatası: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Kullanıcılar yüklenirken bir hata oluştu.')),
+        );
+      }
+    }
   }
 
   void toggleFavorite() async {
-    setState(() {
-      isFavorite = !isFavorite;
-      likeCount += isFavorite ? 1 : -1;
-    });
+    // Önce UI'ı güncelle
+    if (mounted) {
+      setState(() {
+        isFavorite = !isFavorite;
+      });
+    }
 
     if (isFavorite) {
       await _favoriyeEkle();
     } else {
       await _favoridenSil();
     }
+
+    // Favori durumunu ve beğeni sayısını backend'den yeniden yükle
+    // Böylece hem kendi durumunu hem de toplam sayıyı doğru gösterir
+    await _checkIfFavorite();
+    await _loadLikeCount();
   }
 
   Future<void> _favoriyeEkle() async {
@@ -137,8 +342,8 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text("Favorilere eklendi!")));
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Favori eklenirken bir hata oluştu.")));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Favori eklenirken bir hata oluştu.")));
     }
   }
 
@@ -153,8 +358,8 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Favorilerden kaldırıldı!")));
     } else {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Favoriden kaldırılırken bir hata oluştu.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Favoriden kaldırılırken bir hata oluştu.")));
     }
   }
 
@@ -203,13 +408,17 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
-                IconButton(
-                  iconSize: 28,
-                  icon: Icon(
-                    isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: isFavorite ? Colors.red : Colors.grey[600],
+                GestureDetector(
+                  onTap: toggleFavorite,
+                  onLongPress: _showFavoriteUsers,
+                  child: IconButton(
+                    iconSize: 28,
+                    icon: Icon(
+                      isFavorite ? Icons.favorite : Icons.favorite_border,
+                      color: isFavorite ? Colors.red : Colors.grey[600],
+                    ),
+                    onPressed: toggleFavorite,
                   ),
-                  onPressed: toggleFavorite,
                 ),
                 Text('$likeCount',
                     style: const TextStyle(fontWeight: FontWeight.w500)),
@@ -238,15 +447,35 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
           if (_showComments)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Column(
-                children: _comments
-                    .map((comment) => CommentCard(comment: comment))
-                    .toList(),
-              ),
+              child: _comments.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Text(
+                        'Henüz yorum yok',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    )
+                  : Column(
+                      children: _comments
+                          .map((comment) => CommentCard(
+                                comment: comment,
+                                currentUserId: _currentUserId?.toString(),
+                                onDelete: () => _deleteComment(comment),
+                              ))
+                          .toList(),
+                    ),
             ),
           TextButton(
-            onPressed: _toggleComments,
-            child: Text(_showComments ? 'Yorumları Gizle' : 'Yorumları Göster'),
+            onPressed: () {
+              _toggleComments();
+              // Yorumları gösterirken yeniden yükle
+              if (!_showComments) {
+                _loadComments();
+              }
+            },
+            child: Text(_showComments
+                ? 'Yorumları Gizle'
+                : 'Yorumları Göster (${_comments.length})'),
           ),
         ],
       ),

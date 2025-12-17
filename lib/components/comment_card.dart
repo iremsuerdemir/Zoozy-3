@@ -5,10 +5,14 @@ import 'package:zoozy/models/comment.dart';
 
 class CommentCard extends StatelessWidget {
   final Comment comment;
+  final String? currentUserId; // Mevcut kullanıcının userId'si
+  final VoidCallback? onDelete; // Silme callback'i
 
   const CommentCard({
     Key? key,
     required this.comment,
+    this.currentUserId,
+    this.onDelete,
   }) : super(key: key);
 
   String _formatDate(DateTime date) {
@@ -23,17 +27,41 @@ class CommentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    ImageProvider<Object> _resolveAvatar(String avatar) {
+    ImageProvider<Object>? _resolveAvatar(String? avatar) {
+      if (avatar == null || avatar.isEmpty) {
+        return const AssetImage('assets/images/caregiver1.png');
+      }
+
       try {
+        // Base64 formatı: "data:image/png;base64,..." veya "data:image/jpeg;base64,..."
+        if (avatar.startsWith('data:image/')) {
+          // "data:image/png;base64," veya "data:image/jpeg;base64," kısmını atla
+          final base64Index = avatar.indexOf('base64,');
+          if (base64Index != -1) {
+            final base64Str = avatar.substring(base64Index + 7); // "base64," = 7 karakter
+            final bytes = base64Decode(base64Str);
+            return MemoryImage(bytes);
+          }
+        }
+
+        // Base64 formatı: "base64:..." (eski format)
         if (avatar.startsWith('base64:')) {
           final base64Str = avatar.substring(7);
           final bytes = base64Decode(base64Str);
           return MemoryImage(bytes);
         }
+
+        // HTTP/HTTPS URL formatı
+        if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
+          return NetworkImage(avatar);
+        }
+
+        // Asset formatı: "asset:..." veya direkt path
         final assetPath =
             avatar.startsWith('asset:') ? avatar.substring(6) : avatar;
         return AssetImage(assetPath);
-      } catch (_) {
+      } catch (e) {
+        print('⚠️ Avatar yükleme hatası: $e, avatar: ${avatar.substring(0, avatar.length > 50 ? 50 : avatar.length)}');
         return const AssetImage('assets/images/caregiver1.png');
       }
     }
@@ -54,6 +82,13 @@ class CommentCard extends StatelessWidget {
                 CircleAvatar(
                   radius: 20,
                   backgroundImage: _resolveAvatar(comment.authorAvatar),
+                  onBackgroundImageError: (exception, stackTrace) {
+                    // Hata durumunda varsayılan resim göster
+                  },
+                  child: (comment.authorAvatar == null ||
+                          comment.authorAvatar!.isEmpty)
+                      ? const Icon(Icons.person)
+                      : null,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -78,13 +113,49 @@ class CommentCard extends StatelessWidget {
                   ),
                 ),
                 Row(
-                  children: List.generate(5, (index) {
-                    return Icon(
-                      index < comment.rating ? Icons.star : Icons.star_border,
-                      color: Colors.amber,
-                      size: 16,
-                    );
-                  }),
+                  children: [
+                    ...List.generate(5, (index) {
+                      return Icon(
+                        index < comment.rating ? Icons.star : Icons.star_border,
+                        color: Colors.amber,
+                        size: 16,
+                      );
+                    }),
+                    // Sadece kendi yorumunda silme butonu göster
+                    if (currentUserId != null && 
+                        comment.userId != null && 
+                        currentUserId == comment.userId &&
+                        onDelete != null)
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        color: Colors.red,
+                        onPressed: () {
+                          // Silme onayı
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              return AlertDialog(
+                                title: const Text('Yorumu Sil'),
+                                content: const Text('Bu yorumu silmek istediğinize emin misiniz?'),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.of(context).pop(),
+                                    child: const Text('İptal'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.of(context).pop();
+                                      onDelete?.call();
+                                    },
+                                    child: const Text('Sil', style: TextStyle(color: Colors.red)),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      ),
+                  ],
                 ),
               ],
             ),

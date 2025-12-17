@@ -139,5 +139,61 @@ namespace ZoozyApi.Controllers
                 id = newUser.Id
             });
         }
+
+        // -------------------------------------------------------------
+        // 🔄 Kullanıcı profil güncelleme (PhotoUrl dahil)
+        // PUT: api/users/{id}
+        // -------------------------------------------------------------
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateUser(int id, [FromBody] UpdateUserDto dto)
+        {
+            if (dto == null)
+                return BadRequest("Dto gelmedi");
+
+            var user = await _db.Users.FindAsync(id);
+            if (user == null)
+                return NotFound(new { message = "Kullanıcı bulunamadı" });
+
+            // Güncelleme
+            if (!string.IsNullOrEmpty(dto.DisplayName))
+                user.DisplayName = dto.DisplayName;
+
+            // PhotoUrl null değilse VE boş string değilse VE sadece boşluk değilse güncelle
+            // Ayrıca "data:image" ile başlamalı (base64 format kontrolü)
+            if (dto.PhotoUrl != null)
+            {
+                var trimmedPhotoUrl = dto.PhotoUrl.Trim();
+                
+                // Geçerli base64 string kontrolü
+                if (!string.IsNullOrWhiteSpace(trimmedPhotoUrl) && 
+                    trimmedPhotoUrl.Length > 20 && // Minimum uzunluk kontrolü
+                    trimmedPhotoUrl.StartsWith("data:image"))
+                {
+                    user.PhotoUrl = trimmedPhotoUrl;
+                    System.Diagnostics.Debug.WriteLine($"✅ PhotoUrl güncellendi: Uzunluk={user.PhotoUrl.Length}, İlk 50 karakter: {user.PhotoUrl.Substring(0, Math.Min(50, user.PhotoUrl.Length))}");
+                }
+                else
+                {
+                    // Geçersiz PhotoUrl gönderildi - log'la ve GÜNCELLEME
+                    var preview = trimmedPhotoUrl.Length > 50 ? trimmedPhotoUrl.Substring(0, 50) : trimmedPhotoUrl;
+                    System.Diagnostics.Debug.WriteLine($"⚠️ Geçersiz PhotoUrl gönderildi (boş veya geçersiz format): Uzunluk={trimmedPhotoUrl.Length}, İçerik='{preview}'");
+                    // Geçersizse NULL yap (boş string yerine)
+                    user.PhotoUrl = null;
+                }
+            }
+
+            user.UpdatedAt = DateTime.UtcNow;
+
+            _db.Users.Update(user);
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Kullanıcı güncellendi",
+                id = user.Id,
+                displayName = user.DisplayName,
+                photoUrl = user.PhotoUrl
+            });
+        }
     }
 }
