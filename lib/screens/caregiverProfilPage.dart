@@ -102,6 +102,10 @@ class _CaregiverProfilpageState extends State<CaregiverProfilpage> {
   }
 
   Future<void> _onCommentAdded(Comment comment) async {
+    if (!await GuestAccessService.ensureLoggedIn(context)) {
+      return;
+    }
+
     final success = await _commentService.addComment(widget.userName, comment);
     if (success) {
       await _loadComments();

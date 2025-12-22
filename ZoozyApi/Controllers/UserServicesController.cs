@@ -99,6 +99,63 @@ public class UserServicesController : ControllerBase
         _context.UserServices.Add(service);
         await _context.SaveChangesAsync();
 
+        // Service oluşturulduğunda otomatik olarak bir Job/Request de oluştur
+        // Böylece jobs screen'de görünebilir
+        try
+        {
+            var jobCreator = await _context.Users.FindAsync(service.UserId);
+            if (jobCreator != null)
+            {
+                // Service bilgilerinden bir Job/Request oluştur
+                var userRequest = new UserRequest
+                {
+                    UserId = service.UserId,
+                    PetName = "Hizmet Talebi", // Varsayılan pet name (service için)
+                    ServiceName = service.ServiceName,
+                    UserPhoto = "", // Service'te fotoğraf yok
+                    StartDate = DateTime.UtcNow,
+                    EndDate = DateTime.UtcNow.AddDays(30), // Varsayılan 30 gün
+                    DayDiff = 30,
+                    Note = service.Description ?? "",
+                    Location = service.Address ?? "",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+
+                _context.UserRequests.Add(userRequest);
+                await _context.SaveChangesAsync();
+
+                // Job oluşturulduğunda bildirim oluştur
+                var otherUsers = await _context.Users
+                    .Where(u => u.Id != service.UserId && u.IsActive)
+                    .ToListAsync();
+
+                foreach (var user in otherUsers)
+                {
+                    var notification = new Notification
+                    {
+                        UserId = user.Id,
+                        Type = "job",
+                        Title = $"{jobCreator.DisplayName} kişisi yeni bir iş yayınladı",
+                        RelatedUserId = service.UserId,
+                        RelatedJobId = userRequest.Id,
+                        CreatedAt = DateTime.UtcNow,
+                        IsRead = false
+                    };
+
+                    _context.Notifications.Add(notification);
+                }
+
+                await _context.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Job oluşturma hatası service oluşturmayı engellemez
+            // Log the exception (you can use ILogger here)
+            Console.WriteLine($"Service oluşturuldu ama job oluşturulamadı: {ex.Message}");
+        }
+
         return CreatedAtAction(nameof(GetUserService), new { id = service.Id }, service);
     }
 

@@ -11,6 +11,7 @@ import 'package:zoozy/screens/pet_walk_page.dart';
 import 'package:zoozy/screens/profile_screen.dart';
 import 'package:zoozy/services/guest_access_service.dart';
 import 'package:zoozy/services/request_service.dart';
+import 'package:zoozy/services/notification_service.dart';
 
 import '../models/request_item.dart';
 
@@ -30,12 +31,15 @@ class _RequestsScreenState extends State<RequestsScreen> {
 
   List<RequestItem> requestList = [];
   final RequestService _requestService = RequestService();
+  final NotificationService _notificationService = NotificationService();
   bool _isLoading = true;
+  bool _hasUnreadNotifications = false;
 
   @override
   void initState() {
     super.initState();
     _loadRequests();
+    _checkNotifications();
   }
 
   @override
@@ -44,7 +48,51 @@ class _RequestsScreenState extends State<RequestsScreen> {
     // Build tamamlandıktan sonra yükle (setState during build hatasını önlemek için)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadRequests();
+      _checkNotifications();
     });
+  }
+
+  /// Bildirimleri kontrol et
+  Future<void> _checkNotifications() async {
+    try {
+      final isGuest = await GuestAccessService.isGuest();
+      if (isGuest) {
+        if (mounted) {
+          setState(() {
+            _hasUnreadNotifications = false;
+          });
+        }
+        return;
+      }
+
+      final notifications = await _notificationService.getNotifications();
+      final hasUnread = notifications.any((n) => !n.isRead);
+      if (mounted) {
+        setState(() {
+          _hasUnreadNotifications = hasUnread;
+        });
+      }
+    } catch (e) {
+      print('Bildirim kontrol hatası: $e');
+    }
+  }
+
+  /// Tüm bildirimleri okundu yap
+  Future<void> _markAllNotificationsAsRead() async {
+    try {
+      final notifications = await _notificationService.getNotifications();
+      final unreadNotifications =
+          notifications.where((n) => !n.isRead).toList();
+
+      for (var notification in unreadNotifications) {
+        await _notificationService.markAsRead(notification.id);
+      }
+
+      // Bildirimleri tekrar kontrol et
+      await _checkNotifications();
+    } catch (e) {
+      print('Bildirim okundu işaretleme hatası: $e');
+    }
   }
 
   IconData _getServiceIcon(String serviceName) {
@@ -460,23 +508,47 @@ class _RequestsScreenState extends State<RequestsScreen> {
                   final allowed =
                       await GuestAccessService.ensureLoggedIn(context);
                   if (!allowed) return;
+                  // Bildirimleri okundu yap (kırmızı nokta gitsin)
+                  await _markAllNotificationsAsRead();
+                  // State'i hemen güncelle (kırmızı nokta anında kaybolsun)
+                  if (mounted) {
+                    setState(() {
+                      _hasUnreadNotifications = false;
+                    });
+                  }
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => IndexboxMessageScreen(),
                     ),
-                  );
+                  ).then((notificationsRead) {
+                    // Eğer tike basıldıysa (notificationsRead == true), kırmızı noktayı hemen kaldır
+                    if (notificationsRead == true) {
+                      if (mounted) {
+                        setState(() {
+                          _hasUnreadNotifications = false;
+                        });
+                      }
+                    } else {
+                      // Normal şekilde sayfadan dönüldüyse, bildirimleri tekrar kontrol et
+                      _checkNotifications();
+                    }
+                  });
                 },
               ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  width: 10,
-                  height: 10,
-                  decoration: const BoxDecoration(shape: BoxShape.circle),
+              if (_hasUnreadNotifications)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(width: 8),

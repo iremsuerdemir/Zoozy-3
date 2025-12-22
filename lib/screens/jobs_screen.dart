@@ -20,7 +20,7 @@ class JobsScreen extends StatefulWidget {
   State<JobsScreen> createState() => _JobsScreenState();
 }
 
-class _JobsScreenState extends State<JobsScreen> {
+class _JobsScreenState extends State<JobsScreen> with WidgetsBindingObserver {
   // Seçilen ikon index'i
   int selectedIndex = 0;
 
@@ -39,8 +39,25 @@ class _JobsScreenState extends State<JobsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadJobs();
     _checkNotifications();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Uygulama foreground'a geldiğinde job'ları yenile
+    if (state == AppLifecycleState.resumed) {
+      _loadJobs();
+      _checkNotifications();
+    }
   }
 
   @override
@@ -56,6 +73,16 @@ class _JobsScreenState extends State<JobsScreen> {
   /// Bildirimleri kontrol et
   Future<void> _checkNotifications() async {
     try {
+      final isGuest = await GuestAccessService.isGuest();
+      if (isGuest) {
+        if (mounted) {
+          setState(() {
+            _hasUnreadNotifications = false;
+          });
+        }
+        return;
+      }
+
       final notifications = await _notificationService.getNotifications();
       final hasUnread = notifications.any((n) => !n.isRead);
       if (mounted) {
@@ -86,14 +113,14 @@ class _JobsScreenState extends State<JobsScreen> {
     }
   }
 
-  /// Backend'den diğer kullanıcıların job'larını yükle
+  /// Backend'den tüm kullanıcıların job'larını yükle (global feed)
   Future<void> _loadJobs() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
-      final jobs = await _requestService.getOtherUsersRequests();
+      final jobs = await _requestService.getAllJobs();
       setState(() {
         _jobsList = jobs;
         _isLoading = false;
@@ -237,7 +264,8 @@ class _JobsScreenState extends State<JobsScreen> {
       }
     }
 
-    final userDisplayName = job['userDisplayName'] ?? 'Kullanıcı';
+    // Job'u oluşturan kullanıcının bilgilerini kullan
+    final userDisplayName = job['createdByName'] as String? ?? job['userDisplayName'] as String? ?? 'Kullanıcı';
     final userPhotoUrl = job['userPhotoUrl'];
 
     ImageProvider<Object>? _resolveUserAvatar(String? avatar) {
@@ -289,8 +317,9 @@ class _JobsScreenState extends State<JobsScreen> {
 
         // Job bilgilerini al
         final jobId = job['id'] as int?;
-        final jobUserId = job['userId'] as int?;
-        final jobUsername = job['userDisplayName'] as String? ?? 'Kullanıcı';
+        // Job'u oluşturan kullanıcının bilgilerini kullan
+        final jobUserId = job['createdByUserId'] as int? ?? job['userId'] as int?;
+        final jobUsername = job['createdByName'] as String? ?? job['userDisplayName'] as String? ?? 'Kullanıcı';
         final jobUserPhotoUrl = job['userPhotoUrl'] as String? ?? '';
 
         if (jobId == null || jobUserId == null) {
@@ -410,24 +439,26 @@ class _JobsScreenState extends State<JobsScreen> {
                         ),
                         const SizedBox(height: 4),
                       ],
-                      Row(
-                        children: [
-                          Icon(Icons.location_on,
-                              size: 16, color: Colors.grey[600]),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              location,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey[700],
+                      if (location.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            Icon(Icons.location_on,
+                                size: 16, color: Colors.grey[600]),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                location,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[700],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -503,9 +534,18 @@ class _JobsScreenState extends State<JobsScreen> {
                       MaterialPageRoute(
                         builder: (context) => IndexboxMessageScreen(),
                       ),
-                    ).then((_) {
-                      // Sayfadan dönünce bildirimleri tekrar kontrol et
-                      _checkNotifications();
+                    ).then((notificationsRead) {
+                      // Eğer tike basıldıysa (notificationsRead == true), kırmızı noktayı hemen kaldır
+                      if (notificationsRead == true) {
+                        if (mounted) {
+                          setState(() {
+                            _hasUnreadNotifications = false;
+                          });
+                        }
+                      } else {
+                        // Normal şekilde sayfadan dönüldüyse, bildirimleri tekrar kontrol et
+                        _checkNotifications();
+                      }
                     });
                   }
                 },
@@ -528,9 +568,12 @@ class _JobsScreenState extends State<JobsScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
+      body: RefreshIndicator(
+        onRefresh: _loadJobs,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
             Stack(
               clipBehavior: Clip.none,
               children: [
@@ -688,6 +731,7 @@ class _JobsScreenState extends State<JobsScreen> {
             const SizedBox(height: 20),
           ],
         ),
+      ),
       ),
       bottomNavigationBar: CustomBottomNavBar(
         currentIndex: 3,

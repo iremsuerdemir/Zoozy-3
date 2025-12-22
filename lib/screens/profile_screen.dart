@@ -16,6 +16,7 @@ import 'package:zoozy/screens/pet_profile_page.dart';
 import 'package:zoozy/screens/qr_code_screen.dart';
 import 'package:zoozy/screens/settings_screen.dart';
 import 'package:zoozy/services/guest_access_service.dart';
+import 'package:zoozy/services/notification_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -28,14 +29,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String username = 'İrem Su Erdemir';
   String email = '7692003@gmail.com';
   ImageProvider? _profileImage;
+  final NotificationService _notificationService = NotificationService();
+  bool _hasUnreadNotifications = false;
 
   @override
   void initState() {
     super.initState();
     _loadProfileData();
+    _checkNotifications();
     // Build tamamlandıktan sonra çağır (setState during build hatasını önlemek için)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadServices();
+      _checkNotifications();
     });
   }
 
@@ -52,7 +57,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Build tamamlandıktan sonra çağır (setState during build hatasını önlemek için)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadServices();
+      _checkNotifications();
     });
+  }
+
+  /// Bildirimleri kontrol et
+  Future<void> _checkNotifications() async {
+    try {
+      final isGuest = await GuestAccessService.isGuest();
+      if (isGuest) {
+        if (mounted) {
+          setState(() {
+            _hasUnreadNotifications = false;
+          });
+        }
+        return;
+      }
+
+      final notifications = await _notificationService.getNotifications();
+      final hasUnread = notifications.any((n) => !n.isRead);
+      if (mounted) {
+        setState(() {
+          _hasUnreadNotifications = hasUnread;
+        });
+      }
+    } catch (e) {
+      print('Bildirim kontrol hatası: $e');
+    }
+  }
+
+  /// Tüm bildirimleri okundu yap
+  Future<void> _markAllNotificationsAsRead() async {
+    try {
+      final notifications = await _notificationService.getNotifications();
+      final unreadNotifications =
+          notifications.where((n) => !n.isRead).toList();
+
+      for (var notification in unreadNotifications) {
+        await _notificationService.markAsRead(notification.id);
+      }
+
+      // Bildirimleri tekrar kontrol et
+      await _checkNotifications();
+    } catch (e) {
+      print('Bildirim okundu işaretleme hatası: $e');
+    }
   }
 
   Future<void> _loadProfileData() async {
@@ -239,21 +288,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               );
                             },
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.chat_bubble_outline,
-                                color: Colors.white),
-                            onPressed: () async {
-                              final allowed =
-                                  await GuestAccessService.ensureLoggedIn(
-                                      context);
-                              if (!allowed) return;
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) =>
-                                        IndexboxMessageScreen()),
-                              );
-                            },
+                          Stack(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.chat_bubble_outline,
+                                    color: Colors.white),
+                                onPressed: () async {
+                                  final allowed =
+                                      await GuestAccessService.ensureLoggedIn(
+                                          context);
+                                  if (!allowed) return;
+                                  // Bildirimleri okundu yap (kırmızı nokta gitsin)
+                                  await _markAllNotificationsAsRead();
+                                  // State'i hemen güncelle (kırmızı nokta anında kaybolsun)
+                                  if (mounted) {
+                                    setState(() {
+                                      _hasUnreadNotifications = false;
+                                    });
+                                  }
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (context) =>
+                                            IndexboxMessageScreen()),
+                                  ).then((notificationsRead) {
+                                    // Eğer tike basıldıysa (notificationsRead == true), kırmızı noktayı hemen kaldır
+                                    if (notificationsRead == true) {
+                                      if (mounted) {
+                                        setState(() {
+                                          _hasUnreadNotifications = false;
+                                        });
+                                      }
+                                    } else {
+                                      // Normal şekilde sayfadan dönüldüyse, bildirimleri tekrar kontrol et
+                                      _checkNotifications();
+                                    }
+                                  });
+                                },
+                              ),
+                              if (_hasUnreadNotifications)
+                                Positioned(
+                                  right: 8,
+                                  top: 8,
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ],
                       ),

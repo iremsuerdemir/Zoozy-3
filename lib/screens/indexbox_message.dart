@@ -149,6 +149,10 @@ class _BildirimlerEkraniState extends State<BildirimlerEkrani> {
           return n;
         }).toList();
       });
+      
+      // Bildirimler okundu olarak işaretlendi, parent widget'a bildir
+      // Bu sayede chat icon'larındaki kırmızı nokta kalkacak
+      // (IndexboxMessageScreen'deki _markAllNotificationsRead zaten bunu yapıyor)
     }
   }
 
@@ -300,13 +304,19 @@ class _IndexboxMessageScreenState extends State<IndexboxMessageScreen>
     }
   }
 
-  void _markAllNotificationsRead() {
+  void _markAllNotificationsRead() async {
     if (_tabController.index == 1) {
-      _notificationsKey.currentState?._markAllAsRead();
+      await _notificationsKey.currentState?._markAllAsRead();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Tüm Bildirimler Okundu Olarak İşaretlendi')),
       );
+      // Bildirimler okundu olarak işaretlendi
+      // Chat icon'larındaki kırmızı noktayı hemen kaldırmak için Navigator.pop ile true döndür
+      // Bu sayede parent widget'lar kırmızı noktayı kaldırabilir
+      if (mounted) {
+        Navigator.pop(context, true); // true = tüm bildirimler okundu
+      }
     }
   }
 
@@ -554,15 +564,44 @@ class _TaleplerEkraniState extends State<TaleplerEkrani> {
         ));
       }
 
+      // Aynı kişiden gelen mesajları grupla (contactUserId'ye göre)
+      // Her kişi için en son mesajı içeren tek bir kart göster
+      final Map<int?, _ChatPreview> groupedConversations = {};
+      
+      for (var conversation in conversations) {
+        final contactUserId = conversation.jobUserId;
+        
+        // Eğer bu kişi için daha önce bir conversation varsa
+        if (groupedConversations.containsKey(contactUserId)) {
+          final existing = groupedConversations[contactUserId]!;
+          // En son mesajı karşılaştır, daha yeni olanı al
+          if (conversation.messages.isNotEmpty && existing.messages.isNotEmpty) {
+            final newLastMessage = conversation.messages.last;
+            final existingLastMessage = existing.messages.last;
+            
+            if (newLastMessage.timestamp.isAfter(existingLastMessage.timestamp)) {
+              // Yeni mesaj daha yeni, onu kullan
+              groupedConversations[contactUserId] = conversation;
+            }
+          }
+        } else {
+          // İlk kez görülen kişi, direkt ekle
+          groupedConversations[contactUserId] = conversation;
+        }
+      }
+
+      // Gruplanmış conversation'ları listeye çevir
+      final groupedList = groupedConversations.values.toList();
+
       // Tarihe göre sırala (en yeni mesaj üstte)
-      conversations.sort((a, b) {
+      groupedList.sort((a, b) {
         if (a.messages.isEmpty || b.messages.isEmpty) return 0;
         return b.messages.last.timestamp.compareTo(a.messages.last.timestamp);
       });
 
       if (mounted) {
         setState(() {
-          _chats = conversations;
+          _chats = groupedList;
           _isLoading = false;
         });
       }
@@ -688,8 +727,10 @@ class _TaleplerEkraniState extends State<TaleplerEkrani> {
         }
 
         final messages = data.messages;
-        final previewText =
-            messages.isNotEmpty ? messages.last.text.replaceAll('\n', ' ') : '';
+        // Son mesajın içeriğini göster (lastMessagePreview kullan)
+        final previewText = chat.lastMessagePreview.isNotEmpty
+            ? chat.lastMessagePreview.replaceAll('\n', ' ')
+            : (messages.isNotEmpty ? messages.last.text.replaceAll('\n', ' ') : '');
 
         return Card(
           elevation: 0,

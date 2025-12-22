@@ -119,14 +119,14 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
 
     if (success) {
       print('✅ Yorum başarıyla eklendi, yorumlar yeniden yükleniyor...');
-      
+
       // Yorumları anında göster
       if (mounted) {
         setState(() {
           _showComments = true;
         });
       }
-      
+
       // Yorum eklendikten sonra TÜM KULLANICILARIN yorumlarını yeniden yükle
       // Kısa bir gecikme ekle (backend'in kaydetmesi için)
       await Future.delayed(const Duration(milliseconds: 300));
@@ -352,6 +352,10 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
   }
 
   void toggleFavorite() async {
+    if (!await GuestAccessService.ensureLoggedIn(context)) {
+      return;
+    }
+
     // Önce UI'ı güncelle
     if (mounted) {
       setState(() {
@@ -470,7 +474,10 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
                   iconSize: 26,
                   icon: const Icon(Icons.mode_comment_outlined,
                       color: Colors.grey),
-                  onPressed: () {
+                  onPressed: () async {
+                    if (!await GuestAccessService.ensureLoggedIn(context)) {
+                      return;
+                    }
                     showDialog(
                       context: context,
                       builder: (context) => CommentDialog(

@@ -53,6 +53,59 @@ class RequestService {
     }
   }
 
+  /// Get all jobs from all users (global feed - no filtering)
+  /// JobsScreen için kullanılır - tüm kullanıcıların job'larını gösterir
+  Future<List<Map<String, dynamic>>> getAllJobs() async {
+    try {
+      print('📥 Tüm job\'lar yükleniyor (global feed)');
+      final response = await httpClient
+          .get(Uri.parse('$baseUrl/all'))
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        final jobs = data
+            .map((json) {
+                  // Location field'ını kontrol et (hem camelCase hem PascalCase)
+                  final location = json['location'] ?? json['Location'] ?? '';
+                  
+                  return {
+                    'id': json['id'],
+                    'userId': json['userId'],
+                    'petName': json['petName'] ?? '',
+                    'serviceName': json['serviceName'] ?? '',
+                    'userPhoto': json['userPhoto'] ?? '',
+                    'startDate': json['startDate'],
+                    'endDate': json['endDate'],
+                    'dayDiff': json['dayDiff'] ?? 0,
+                    'note': json['note'] ?? '',
+                    'location': location,
+                    // Job'u oluşturan kullanıcı bilgileri
+                    'createdByUserId': json['createdByUserId'] ?? json['userId'],
+                    'createdByName': json['createdByName'] ?? json['userDisplayName'] ?? '',
+                    // Kullanıcı bilgileri
+                    'userDisplayName': json['userDisplayName'] ?? json['createdByName'] ?? '',
+                    'userEmail': json['userEmail'] ?? '',
+                    'userPhotoUrl': json['userPhotoUrl'],
+                  };
+                })
+            .toList();
+        print('✅ ${jobs.length} job yüklendi (global feed)');
+        // Her job'ın detaylarını logla
+        for (var job in jobs) {
+          print('  - Job ID: ${job['id']}, CreatedBy: ${job['createdByName']} (UserId: ${job['createdByUserId']}), PetName: ${job['petName']}');
+        }
+        return jobs;
+      } else {
+        print('❌ Job yükleme hatası - Status: ${response.statusCode}, Body: ${response.body}');
+        return [];
+      }
+    } catch (e) {
+      print('❌ Tüm job\'lar yükleme hatası: $e');
+      return [];
+    }
+  }
+
   /// Get all requests from other users (excluding current user)
   /// JobsScreen için kullanılır
   Future<List<Map<String, dynamic>>> getOtherUsersRequests() async {
@@ -69,21 +122,26 @@ class RequestService {
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         return data
-            .map((json) => {
-                  'id': json['id'],
-                  'userId': json['userId'],
-                  'petName': json['petName'] ?? '',
-                  'serviceName': json['serviceName'] ?? '',
-                  'userPhoto': json['userPhoto'] ?? '',
-                  'startDate': json['startDate'],
-                  'endDate': json['endDate'],
-                  'dayDiff': json['dayDiff'] ?? 0,
-                  'note': json['note'] ?? '',
-                  'location': json['location'] ?? '',
-                  // Kullanıcı bilgileri
-                  'userDisplayName': json['userDisplayName'] ?? '',
-                  'userEmail': json['userEmail'] ?? '',
-                  'userPhotoUrl': json['userPhotoUrl'],
+            .map((json) {
+                  // Location field'ını kontrol et (hem camelCase hem PascalCase)
+                  final location = json['location'] ?? json['Location'] ?? '';
+                  
+                  return {
+                    'id': json['id'],
+                    'userId': json['userId'],
+                    'petName': json['petName'] ?? '',
+                    'serviceName': json['serviceName'] ?? '',
+                    'userPhoto': json['userPhoto'] ?? '',
+                    'startDate': json['startDate'],
+                    'endDate': json['endDate'],
+                    'dayDiff': json['dayDiff'] ?? 0,
+                    'note': json['note'] ?? '',
+                    'location': location,
+                    // Kullanıcı bilgileri
+                    'userDisplayName': json['userDisplayName'] ?? '',
+                    'userEmail': json['userEmail'] ?? '',
+                    'userPhotoUrl': json['userPhotoUrl'],
+                  };
                 })
             .toList();
       }
@@ -107,6 +165,8 @@ class RequestService {
 
       print(
           '📤 Request oluşturuluyor: userId=$userId, petName=${request.petName}, serviceName=${request.serviceName}');
+      print('📤 Bu job diğer kullanıcıların jobs_screen\'inde görünecek (userId=$userId hariç)');
+      print('📤 Bu job diğer kullanıcıların jobs_screen\'inde görünecek (userId=$userId hariç)');
 
       // UserPhoto uzunluğunu kontrol et
       String userPhotoToSend = request.userPhoto;

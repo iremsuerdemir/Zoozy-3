@@ -11,7 +11,9 @@ import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:zoozy/services/user_service.dart';
 
 class EditProfileScreen extends StatefulWidget {
-  const EditProfileScreen({Key? key}) : super(key: key);
+  final bool shouldReturnToChat;
+  
+  const EditProfileScreen({Key? key, this.shouldReturnToChat = false}) : super(key: key);
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -29,6 +31,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Color _emailFieldColor = Colors.grey[100]!;
   Color _phoneFieldColor = Colors.grey[100]!;
+  String? _completePhoneNumber; // Ülke kodu dahil tam telefon numarası
 
   @override
   void initState() {
@@ -67,6 +70,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() {
       _usernameController.text = loadedUsername;
       _emailController.text = loadedEmail;
+      // Telefon numarasını yükle - eğer ülke kodu yoksa sadece numarayı göster
+      // IntlPhoneField ülke kodunu otomatik ekleyecek
       _phoneController.text = loadedPhone;
       _webImage = loadedWebImage;
       _image = loadedImage;
@@ -82,10 +87,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     ).hasMatch(email);
 
     // IntlPhoneField kullanıldığı için telefon numarasını doğru şekilde kontrol et
-    // Telefon numarası boşluklar ve tire işaretleri olmadan sadece rakamları içermelidir
-    final cleanPhone =
-        phone.replaceAll(RegExp(r'[^\d]'), ''); // Sadece rakamları al
-    bool isPhoneValid = cleanPhone.length >= 10; // En az 10 haneli olmalı
+    // _completePhoneNumber varsa onu kullan (ülke kodu dahil), yoksa controller'dan al
+    String phoneToSave;
+    if (_completePhoneNumber != null && _completePhoneNumber!.isNotEmpty) {
+      // Ülke kodu dahil tam numarayı kullan (+ işaretini kaldır, sadece rakamlar)
+      phoneToSave = _completePhoneNumber!.replaceAll(RegExp(r'[^\d]'), '');
+      // Eğer + ile başlıyorsa, + işaretini kaldır (zaten rakamlar alındı)
+      // WhatsApp için ülke kodu dahil tam numara gerekiyor (örn: 905306403286)
+    } else {
+      // Fallback: controller'dan al ve sadece rakamları temizle
+      // Eğer ülke kodu yoksa, Türkiye için 90 ekle
+      phoneToSave = phone.replaceAll(RegExp(r'[^\d]'), '');
+      // Eğer numara 10 haneli ve 5 ile başlıyorsa (Türkiye cep telefonu), 90 ekle
+      if (phoneToSave.length == 10 && phoneToSave.startsWith('5')) {
+        phoneToSave = '90$phoneToSave';
+      }
+    }
+    
+    // WhatsApp için en az 11-12 haneli olmalı (ülke kodu dahil)
+    bool isPhoneValid = phoneToSave.length >= 11;
 
     setState(() {
       _emailFieldColor = isEmailValid ? Colors.grey[100]! : Colors.red[100]!;
@@ -107,7 +127,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     await prefs.setString('username', _usernameController.text);
     await prefs.setString('displayName', _usernameController.text);
     await prefs.setString('email', email);
-    await prefs.setString('phone', cleanPhone);
+    await prefs.setString('phone', phoneToSave);
 
     Uint8List? imageBytes;
 
@@ -168,12 +188,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Profil bilgileri kaydedildi!'),
+        content: Text('Başarı ile kaydedildi'),
         backgroundColor: Colors.green,
         duration: Duration(seconds: 2),
       ),
     );
     setState(() {});
+
+    // Eğer chat ekranından gelindiyse, kaydetme sonrası otomatik olarak chat ekranına dön
+    if (widget.shouldReturnToChat) {
+      // Snackbar mesajının gösterilmesi için kısa bir gecikme
+      await Future.delayed(const Duration(seconds: 2));
+      if (mounted) {
+        Navigator.pop(context, true); // true = telefon numarası kaydedildi
+      }
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -349,6 +378,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ),
                     ),
                     onChanged: (phone) {
+                      // Ülke kodu dahil tam telefon numarasını kaydet
+                      _completePhoneNumber = phone.completeNumber;
                       setState(() {}); // karakter sayacını güncelle
                     },
                     onCountryChanged: (country) {

@@ -21,6 +21,13 @@ public class NotificationsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<object>>> GetNotifications([FromQuery] int userId)
     {
+        // userId kontrolü - geçersiz userId ise hata döndür
+        if (userId <= 0)
+        {
+            return BadRequest(new { message = "Geçersiz kullanıcı ID." });
+        }
+
+        // Sadece bu kullanıcıya ait bildirimleri getir
         var notifications = await _context.Notifications
             .Where(n => n.UserId == userId)
             .Include(n => n.RelatedUser)

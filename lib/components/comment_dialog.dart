@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zoozy/models/comment.dart';
+import 'package:zoozy/services/guest_access_service.dart';
 
 class CommentDialog extends StatefulWidget {
   final String cardId;
@@ -49,7 +50,11 @@ class _CommentDialogState extends State<CommentDialog> {
     super.dispose();
   }
 
-  void _submitComment() {
+  void _submitComment() async {
+    if (!await GuestAccessService.ensureLoggedIn(context)) {
+      return;
+    }
+
     if (_messageController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Lütfen bir yorum yazın!")),

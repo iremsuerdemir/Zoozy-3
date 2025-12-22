@@ -317,11 +317,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const EditProfileScreen(),
+                      builder: (context) => const EditProfileScreen(
+                        shouldReturnToChat: true,
+                      ),
                     ),
-                  ).then((_) {
+                  ).then((phoneSaved) {
                     // Profil ekranından dönünce telefon numarasını tekrar kontrol et
-                    _openWhatsApp(isVideo: isVideo);
+                    if (phoneSaved == true) {
+                      // Telefon numarası kaydedildi, 5-6 saniye bekle sonra WhatsApp'ı aç
+                      Future.delayed(const Duration(seconds: 5), () {
+                        if (mounted) {
+                          _openWhatsApp(isVideo: isVideo);
+                        }
+                      });
+                    }
                   });
                 },
                 child: const Text('Profili Düzenle'),
@@ -333,7 +342,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       return;
     }
 
-    final sanitized = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    // Telefon numarasını temizle ve WhatsApp formatına çevir
+    // Eğer + ile başlıyorsa kaldır, sadece rakamları al
+    String sanitized = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    
+    // Eğer + ile başlıyorsa kaldır
+    if (sanitized.startsWith('+')) {
+      sanitized = sanitized.substring(1);
+    }
+    
+    // Eğer numara 10 haneli ve 5 ile başlıyorsa (Türkiye cep telefonu), 90 ekle
+    if (sanitized.length == 10 && sanitized.startsWith('5')) {
+      sanitized = '90$sanitized';
+    }
+    
     if (sanitized.isEmpty) {
       // Telefon numarası geçersizse profil ekranına yönlendir
       if (mounted) {
@@ -355,11 +377,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const EditProfileScreen(),
+                      builder: (context) => const EditProfileScreen(
+                        shouldReturnToChat: true,
+                      ),
                     ),
-                  ).then((_) {
+                  ).then((phoneSaved) {
                     // Profil ekranından dönünce telefon numarasını tekrar kontrol et
-                    _openWhatsApp(isVideo: isVideo);
+                    if (phoneSaved == true) {
+                      // Telefon numarası kaydedildi, 5-6 saniye bekle sonra WhatsApp'ı aç
+                      Future.delayed(const Duration(seconds: 5), () {
+                        if (mounted) {
+                          _openWhatsApp(isVideo: isVideo);
+                        }
+                      });
+                    }
                   });
                 },
                 child: const Text('Profili Düzenle'),
@@ -371,6 +402,16 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       return;
     }
 
+    // WhatsApp açılırken "Lütfen bekleyiniz" mesajı göster
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Lütfen bekleyiniz...'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+
     final encodedMessage = Uri.encodeComponent(
       isVideo
           ? 'Merhaba $_contactName, WhatsApp üzerinden görüntülü görüşme başlatıyorum.'
@@ -378,11 +419,20 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     );
     final uri = Uri.parse('https://wa.me/$sanitized?text=$encodedMessage');
 
+    // Kısa bir gecikme ekle (kullanıcı mesajı görebilsin)
+    await Future.delayed(const Duration(milliseconds: 500));
+
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('WhatsApp açılamadı.')),
         );
+      }
+    } else {
+      // WhatsApp başarıyla açıldı, snackbar'ı kapat
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
       }
     }
   }

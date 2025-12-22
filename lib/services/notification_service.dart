@@ -23,21 +23,27 @@ class NotificationService {
   Future<List<NotificationModel>> getNotifications() async {
     try {
       final userId = await _getCurrentUserId();
-      if (userId == null) {
+      if (userId == null || userId <= 0) {
+        print('⚠️ Geçersiz userId: $userId - Bildirimler yüklenemiyor');
         return [];
       }
 
+      print('📥 Bildirimler yükleniyor - userId: $userId');
       final response = await httpClient
           .get(Uri.parse('$baseUrl?userId=$userId'))
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((json) => NotificationModel.fromJson(json)).toList();
+        final notifications = data.map((json) => NotificationModel.fromJson(json)).toList();
+        print('✅ ${notifications.length} bildirim yüklendi - userId: $userId');
+        return notifications;
+      } else {
+        print('❌ Bildirim yükleme hatası - Status: ${response.statusCode}, Body: ${response.body}');
+        return [];
       }
-      return [];
     } catch (e) {
-      print('Bildirim yükleme hatası: $e');
+      print('❌ Bildirim yükleme hatası: $e');
       return [];
     }
   }

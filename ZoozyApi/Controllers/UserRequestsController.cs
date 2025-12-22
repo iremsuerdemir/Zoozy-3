@@ -34,11 +34,56 @@ public class UserRequestsController : ControllerBase
         return Ok(requests);
     }
 
+    // GET: api/UserRequests/all
+    // Tüm kullanıcıların job'larını getir (global feed - filtreleme yok)
+    [HttpGet("all")]
+    public async Task<ActionResult<IEnumerable<object>>> GetAllJobs()
+    {
+        var requests = await _context.UserRequests
+            .Join(
+                _context.Users,
+                request => request.UserId,
+                user => user.Id,
+                (request, user) => new
+                {
+                    Id = request.Id,
+                    UserId = request.UserId,
+                    PetName = request.PetName,
+                    ServiceName = request.ServiceName,
+                    UserPhoto = request.UserPhoto,
+                    StartDate = request.StartDate,
+                    EndDate = request.EndDate,
+                    DayDiff = request.DayDiff,
+                    Note = request.Note,
+                    Location = request.Location,
+                    CreatedAt = request.CreatedAt,
+                    UpdatedAt = request.UpdatedAt,
+                    // Job'u oluşturan kullanıcı bilgileri
+                    CreatedByUserId = request.UserId,
+                    CreatedByName = user.DisplayName,
+                    UserDisplayName = user.DisplayName,
+                    UserEmail = user.Email,
+                    UserPhotoUrl = user.PhotoUrl
+                }
+            )
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        return Ok(requests);
+    }
+
     // GET: api/UserRequests/others?excludeUserId=1
     // Login olan kullanıcı hariç tüm kullanıcıların user request'lerini getir
     [HttpGet("others")]
     public async Task<ActionResult<IEnumerable<object>>> GetOtherUsersRequests([FromQuery] int excludeUserId)
     {
+        // excludeUserId kontrolü
+        if (excludeUserId <= 0)
+        {
+            return BadRequest(new { message = "Geçersiz kullanıcı ID." });
+        }
+
+        // Sadece excludeUserId dışındaki kullanıcıların request'lerini getir
         var requests = await _context.UserRequests
             .Where(r => r.UserId != excludeUserId)
             .Join(
