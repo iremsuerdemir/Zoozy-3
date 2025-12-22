@@ -19,6 +19,8 @@ public class AppDbContext : DbContext
     public DbSet<UserFavorite> UserFavorites => Set<UserFavorite>();
     public DbSet<UserComment> UserComments => Set<UserComment>();
     public DbSet<UserService> UserServices => Set<UserService>();
+    public DbSet<Message> Messages => Set<Message>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -95,11 +97,58 @@ public class AppDbContext : DbContext
             .Property(c => c.AuthorAvatar)
             .HasColumnType("nvarchar(max)");
 
+        // UserPhoto için NVARCHAR(MAX) kullan (base64 string çok uzun olabilir)
+        modelBuilder.Entity<UserRequest>()
+            .Property(r => r.UserPhoto)
+            .HasColumnType("nvarchar(max)");
+
         // UserService -> User (FK)
         modelBuilder.Entity<UserService>()
             .HasOne(s => s.User)
             .WithMany()
             .HasForeignKey(s => s.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Message -> Sender (FK)
+        modelBuilder.Entity<Message>()
+            .HasOne(m => m.Sender)
+            .WithMany()
+            .HasForeignKey(m => m.SenderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Message -> Receiver (FK)
+        modelBuilder.Entity<Message>()
+            .HasOne(m => m.Receiver)
+            .WithMany()
+            .HasForeignKey(m => m.ReceiverId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Message -> Job (FK)
+        modelBuilder.Entity<Message>()
+            .HasOne(m => m.Job)
+            .WithMany()
+            .HasForeignKey(m => m.JobId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Notification -> User (FK)
+        modelBuilder.Entity<Notification>()
+            .HasOne(n => n.User)
+            .WithMany()
+            .HasForeignKey(n => n.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Notification -> RelatedUser (FK)
+        modelBuilder.Entity<Notification>()
+            .HasOne(n => n.RelatedUser)
+            .WithMany()
+            .HasForeignKey(n => n.RelatedUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Notification -> RelatedJob (FK)
+        modelBuilder.Entity<Notification>()
+            .HasOne(n => n.RelatedJob)
+            .WithMany()
+            .HasForeignKey(n => n.RelatedJobId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -20,7 +20,7 @@ public class UserRequest
     [MaxLength(100)]
     public string ServiceName { get; set; } = string.Empty;
     
-    [MaxLength(5000)]
+    // Base64 encoded image - NVARCHAR(MAX) için MaxLength kaldırıldı
     public string? UserPhoto { get; set; } // Base64 encoded image
     
     [Required]

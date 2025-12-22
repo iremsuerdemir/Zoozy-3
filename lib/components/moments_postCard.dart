@@ -8,6 +8,7 @@ import 'package:zoozy/services/comment_service_http.dart';
 import 'package:zoozy/services/favorite_service.dart';
 import 'package:zoozy/components/comment_card.dart';
 import 'package:zoozy/components/comment_dialog.dart';
+import 'package:zoozy/services/guest_access_service.dart';
 
 class MomentsPostCard extends StatefulWidget {
   final String userName;
@@ -48,6 +49,7 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
   List<Comment> _comments = [];
   bool _showComments = false;
   int? _currentUserId; // Mevcut kullanıcının userId'si
+  bool _isLoggedIn = false; // Login olan kullanıcı mı?
 
   @override
   void initState() {
@@ -70,9 +72,11 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
   Future<void> _loadCurrentUserId() async {
     final prefs = await SharedPreferences.getInstance();
     final userId = prefs.getInt('userId');
+    final isGuest = await GuestAccessService.isGuest();
     if (mounted) {
       setState(() {
         _currentUserId = userId;
+        _isLoggedIn = userId != null && !isGuest;
       });
     }
   }
@@ -115,16 +119,20 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
 
     if (success) {
       print('✅ Yorum başarıyla eklendi, yorumlar yeniden yükleniyor...');
-      // Yorum eklendikten sonra TÜM KULLANICILARIN yorumlarını yeniden yükle
-      // Kısa bir gecikme ekle (backend'in kaydetmesi için)
-      await Future.delayed(const Duration(milliseconds: 500));
-      await _loadComments();
-
-      // Yorumları göster
+      
+      // Yorumları anında göster
       if (mounted) {
         setState(() {
           _showComments = true;
         });
+      }
+      
+      // Yorum eklendikten sonra TÜM KULLANICILARIN yorumlarını yeniden yükle
+      // Kısa bir gecikme ekle (backend'in kaydetmesi için)
+      await Future.delayed(const Duration(milliseconds: 300));
+      await _loadComments();
+
+      if (mounted) {
         print(
             '✅ Yorumlar gösteriliyor, toplam yorum sayısı: ${_comments.length}');
       }
@@ -496,6 +504,7 @@ class _MomentsPostCardState extends State<MomentsPostCard> {
                                 comment: comment,
                                 currentUserId: _currentUserId?.toString(),
                                 onDelete: () => _deleteComment(comment),
+                                isLoggedIn: _isLoggedIn,
                               ))
                           .toList(),
                     ),

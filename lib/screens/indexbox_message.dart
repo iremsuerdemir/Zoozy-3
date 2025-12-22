@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zoozy/screens/chat_conversation_screen.dart';
-import 'package:zoozy/models/notification_item.dart';
+import 'package:zoozy/models/notification_model.dart';
+import 'package:zoozy/services/notification_service.dart';
+import 'package:zoozy/services/chat_service.dart';
+import 'package:zoozy/services/request_service.dart';
 
 // NOT: Projenizde zaten ChatMessage modeli tanımlıysa onu kullanın.
 // Bu örnek kod ChatMessage sınıfının fromJson metoduna dayanmaktadır.
@@ -62,64 +65,126 @@ class BildirimlerEkrani extends StatefulWidget {
 }
 
 class _BildirimlerEkraniState extends State<BildirimlerEkrani> {
-  // Örnek bildirim listesi (gerçekte server / local storage ile değiştirilebilir)
-  List<NotificationItem> _notifications = [
-    NotificationItem(
-      title: 'Yeni Mesaj!',
-      body: 'Emir Öztürk size bir teklif gönderdi.',
-      isRead: false,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-    ),
-    NotificationItem(
-      title: 'İlanınız Onaylandı',
-      body: 'Gündüz bakımı ilanınız yayına alındı.',
-      isRead: false,
-      timestamp: DateTime.now().subtract(const Duration(hours: 1)),
-    ),
-    NotificationItem(
-      title: 'Bakım Tamamlandı',
-      body: 'Dostunuzun bakımı başarıyla tamamlandı.',
-      isRead: true,
-      timestamp: DateTime.now().subtract(const Duration(days: 1)),
-    ),
-  ];
+  final NotificationService _notificationService = NotificationService();
+  List<NotificationModel> _notifications = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  // Backend'den bildirimleri yükle
+  Future<void> _loadNotifications() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final notifications = await _notificationService.getNotifications();
+      if (mounted) {
+        setState(() {
+          _notifications = notifications;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Bildirim yükleme hatası: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   // Bildirimi okundu olarak işaretler
-  void _markAsRead(int index) {
-    setState(() {
-      _notifications[index].isRead = true;
-    });
+  Future<void> _markAsRead(int index) async {
+    final notification = _notifications[index];
+    if (notification.isRead) return;
+
+    final success = await _notificationService.markAsRead(notification.id);
+    if (success && mounted) {
+      setState(() {
+        _notifications[index] = NotificationModel(
+          id: notification.id,
+          userId: notification.userId,
+          type: notification.type,
+          title: notification.title,
+          relatedUserId: notification.relatedUserId,
+          relatedJobId: notification.relatedJobId,
+          createdAt: notification.createdAt,
+          isRead: true,
+          relatedUsername: notification.relatedUsername,
+        );
+      });
+    }
   }
 
   // Tüm bildirimleri okundu yapar (InboxActionsBar'dan çağrılır)
-  void _markAllAsRead() {
-    setState(() {
-      for (var n in _notifications) {
-        n.isRead = true;
-      }
-    });
+  Future<void> _markAllAsRead() async {
+    final unreadNotifications = _notifications.where((n) => !n.isRead).toList();
+
+    for (var notification in unreadNotifications) {
+      await _notificationService.markAsRead(notification.id);
+    }
+
+    if (mounted) {
+      setState(() {
+        _notifications = _notifications.map((n) {
+          if (!n.isRead) {
+            return NotificationModel(
+              id: n.id,
+              userId: n.userId,
+              type: n.type,
+              title: n.title,
+              relatedUserId: n.relatedUserId,
+              relatedJobId: n.relatedJobId,
+              createdAt: n.createdAt,
+              isRead: true,
+              relatedUsername: n.relatedUsername,
+            );
+          }
+          return n;
+        }).toList();
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     if (_notifications.isEmpty) {
       return _buildEmptyState();
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      itemCount: _notifications.length,
-      itemBuilder: (context, index) {
-        final notification = _notifications[index];
-        return _buildNotificationCard(context, notification, index);
-      },
+    return RefreshIndicator(
+      onRefresh: _loadNotifications,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        itemCount: _notifications.length,
+        itemBuilder: (context, index) {
+          final notification = _notifications[index];
+          return _buildNotificationCard(context, notification, index);
+        },
+      ),
     );
   }
 
   Widget _buildNotificationCard(
-      BuildContext context, NotificationItem notification, int index) {
+      BuildContext context, NotificationModel notification, int index) {
+    // Okunmamış bildirimler için gri arka plan, okunmuş bildirimler için beyaz
     final Color backgroundColor =
-        notification.isRead ? Colors.white : const Color(0xFFEBEFF3);
+        notification.isRead ? Colors.white : Colors.grey[200]!;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -136,13 +201,15 @@ class _BildirimlerEkraniState extends State<BildirimlerEkrani> {
           ),
         ),
         subtitle: Text(
-          notification.body,
+          notification.type == 'job'
+              ? 'Yeni bir iş ilanı yayınlandı'
+              : 'Yeni bir mesaj aldınız',
           style: TextStyle(
             color: notification.isRead ? Colors.grey : Colors.black54,
           ),
         ),
         trailing: Text(
-          '${notification.timestamp.hour}:${notification.timestamp.minute.toString().padLeft(2, '0')}',
+          '${notification.createdAt.hour}:${notification.createdAt.minute.toString().padLeft(2, '0')}',
           style: TextStyle(
             fontSize: 12,
             color: notification.isRead ? Colors.grey : Colors.black54,
@@ -202,7 +269,8 @@ class _IndexboxMessageScreenState extends State<IndexboxMessageScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    // Bildirimler sekmesi ilk açılsın (index 1)
+    _tabController = TabController(length: 2, vsync: this, initialIndex: 1);
     _tabController.addListener(_handleTabChange);
   }
 
@@ -388,38 +456,125 @@ class TaleplerEkrani extends StatefulWidget {
 }
 
 class _TaleplerEkraniState extends State<TaleplerEkrani> {
-  List<_ChatPreview> _chats = [
-    _ChatPreview(
-      contactName: 'Emir Öztürk',
-      contactUsername: 'Emir_Ozturk',
-      avatar: 'assets/images/caregiver1.png',
-      phoneNumber: '+905306403286',
-      lastMessagePreview:
-          'Merhaba İrem Su! Ben Emir, Trakya Üniversitesi Bilgisayar Mühendisliği bölümünde Doçent Dr. olarak görev yapıyorum...',
-      messages: [
-        ChatMessage(
-          text:
-              'Merhaba İrem Su!\n\nBenim adım Emir Öztürk. Trakya Üniversitesi Bilgisayar Mühendisliği bölümünde Doçent Dr. olarak görev yapıyorum...',
-          timestamp: DateTime(2024, 11, 18, 14, 1),
-        ),
-      ],
-    ),
-    _ChatPreview(
-      contactName: 'Ayşe Kaya',
-      contactUsername: 'Ayse_Kaya',
-      avatar: 'assets/images/caregiver1.png',
-      phoneNumber: '+905321234567',
-      lastMessagePreview:
-          'Merhaba, ilanınızı gördüm. Kediniz için harika bir pansiyonum var...',
-      messages: [
-        ChatMessage(
-          text:
-              'Merhaba, ilanınızı gördüm. Kediniz için harika bir pansiyonum var...',
-          timestamp: DateTime(2024, 11, 19, 10, 30),
-        ),
-      ],
-    ),
-  ];
+  final ChatService _chatService = ChatService();
+  final RequestService _requestService = RequestService();
+  List<_ChatPreview> _chats = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConversations();
+  }
+
+  // Backend'den conversation'ları yükle
+  Future<void> _loadConversations() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // SharedPreferences'ı bir kez al
+      final prefs = await SharedPreferences.getInstance();
+      final currentUserId = prefs.getInt('userId');
+      final currentUserDisplayName =
+          prefs.getString('displayName') ?? 'Kullanıcı';
+      final currentUserPhotoUrl = prefs.getString('photoUrl');
+
+      // Tüm job'ları çek (hem kendi job'larım hem de diğer kullanıcıların job'ları)
+      final myJobs = await _requestService.getUserRequests();
+      final otherJobs = await _requestService.getOtherUsersRequests();
+
+      // Kendi job'larımı formatla
+      final myJobsFormatted = myJobs
+          .map((j) => {
+                'id': j.id,
+                'userId': currentUserId,
+                'userDisplayName': currentUserDisplayName,
+                'userPhotoUrl': currentUserPhotoUrl,
+              })
+          .toList();
+
+      final allJobs = [...myJobsFormatted, ...otherJobs];
+
+      final List<_ChatPreview> conversations = [];
+
+      // Her job için mesajları kontrol et
+      for (var job in allJobs) {
+        final jobId = job['id'] as int?;
+        if (jobId == null) continue;
+
+        final messages = await _chatService.getMessages(jobId);
+        if (messages.isEmpty) continue; // Mesaj yoksa gösterilmez
+
+        // Son mesajı al
+        final lastMessage = messages.last;
+
+        // Mesajı atan kişinin bilgilerini belirle
+        // Eğer mesajı ben attıysam (senderId == currentUserId), alıcının bilgilerini göster
+        // Eğer mesajı başkası attıysa (receiverId == currentUserId), gönderenin bilgilerini göster
+        String contactName;
+        String contactUsername;
+        String? contactPhotoUrl;
+        int? contactUserId;
+
+        if (lastMessage.senderId == currentUserId) {
+          // Mesajı ben attım, alıcının bilgilerini göster
+          contactName = lastMessage.receiverUsername ?? 'Kullanıcı';
+          contactUsername = contactName.replaceAll(' ', '_');
+          contactPhotoUrl = lastMessage.receiverPhotoUrl;
+          contactUserId = lastMessage.receiverId;
+        } else {
+          // Mesajı başkası attı, gönderenin bilgilerini göster
+          contactName = lastMessage.senderUsername ?? 'Kullanıcı';
+          contactUsername = contactName.replaceAll(' ', '_');
+          contactPhotoUrl = lastMessage.senderPhotoUrl;
+          contactUserId = lastMessage.senderId;
+        }
+
+        // ChatMessage formatına dönüştür
+        final chatMessages = messages.map((msg) {
+          final isMe = msg.senderId == currentUserId;
+          return ChatMessage(
+            text: msg.messageText,
+            isMe: isMe,
+            timestamp: msg.createdAt,
+          );
+        }).toList();
+
+        conversations.add(_ChatPreview(
+          contactName: contactName,
+          contactUsername: contactUsername,
+          avatar: contactPhotoUrl ?? '',
+          phoneNumber: '', // Backend'den telefon numarası gelmiyor, boş bırak
+          lastMessagePreview: lastMessage.messageText,
+          messages: chatMessages,
+          jobId: jobId,
+          jobUserId: contactUserId, // Mesajı atan kişinin userId'si
+        ));
+      }
+
+      // Tarihe göre sırala (en yeni mesaj üstte)
+      conversations.sort((a, b) {
+        if (a.messages.isEmpty || b.messages.isEmpty) return 0;
+        return b.messages.last.timestamp.compareTo(a.messages.last.timestamp);
+      });
+
+      if (mounted) {
+        setState(() {
+          _chats = conversations;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Conversation yükleme hatası: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   Future<void> _markChatAsDeleted(String username) async {
     final prefs = await SharedPreferences.getInstance();
@@ -469,27 +624,39 @@ class _TaleplerEkraniState extends State<TaleplerEkrani> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     if (_chats.isEmpty) {
       return _buildEmptyState(context);
     }
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(bottom: 12),
-          child: Text(
-            'Son Mesajlar',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+    return RefreshIndicator(
+      onRefresh: _loadConversations,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: Text(
+              'Son Mesajlar',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
           ),
-        ),
-        ..._chats
-            .map((chat) => _buildChatTile(context, chat, widget.isEditing)),
-      ],
+          ..._chats
+              .map((chat) => _buildChatTile(context, chat, widget.isEditing)),
+        ],
+      ),
     );
   }
 
@@ -555,20 +722,40 @@ class _TaleplerEkraniState extends State<TaleplerEkrani> {
                 onTap: isEditing
                     ? null
                     : () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChatConversationScreen(
-                              contactName: chat.contactName,
-                              contactUsername: chat.contactUsername,
-                              contactAvatar: chat.avatar,
-                              phoneNumber: chat.phoneNumber,
-                              messages: messages,
+                        // Backend modunda jobId ve jobUserId ile aç
+                        if (chat.jobId != null && chat.jobUserId != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatConversationScreen(
+                                jobId: chat.jobId,
+                                jobUserId: chat.jobUserId,
+                                jobUsername: chat.contactName,
+                                jobUserPhotoUrl: chat.avatar,
+                              ),
                             ),
-                          ),
-                        ).then((_) {
-                          if (mounted) setState(() {});
-                        });
+                          ).then((_) {
+                            if (mounted) {
+                              _loadConversations(); // Mesajlar güncellendi, tekrar yükle
+                            }
+                          });
+                        } else {
+                          // Eski mod: contact bilgileri ile aç
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatConversationScreen(
+                                contactName: chat.contactName,
+                                contactUsername: chat.contactUsername,
+                                contactAvatar: chat.avatar,
+                                phoneNumber: chat.phoneNumber,
+                                messages: messages,
+                              ),
+                            ),
+                          ).then((_) {
+                            if (mounted) setState(() {});
+                          });
+                        }
                       },
               ),
               if (isEditing)
@@ -679,6 +866,10 @@ class _ChatPreview {
   final String lastMessagePreview;
   final List<ChatMessage> messages;
 
+  // Backend modu için
+  final int? jobId;
+  final int? jobUserId;
+
   const _ChatPreview({
     required this.contactName,
     required this.contactUsername,
@@ -686,6 +877,8 @@ class _ChatPreview {
     required this.phoneNumber,
     required this.lastMessagePreview,
     required this.messages,
+    this.jobId,
+    this.jobUserId,
   });
 }
 

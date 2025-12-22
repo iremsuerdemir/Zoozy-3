@@ -35,7 +35,7 @@ Backend `http://localhost:5001` veya `https://localhost:5002` adresinde çalış
 ### 3. Backend URL Yapılandırması
 
 `lib/config/api_config.dart` dosyasında:
-- Development için: `devBaseUrl` kullanılır (varsayılan: `http://192.168.211.149:5001`)
+- Development için: `devBaseUrl` kullanılır (varsayılan: `http://192.168.241.149:5001`)
 - Production için: `isProduction = true` yapın ve `prodBaseUrl`'i ayarlayın
 
 ## 🧪 Test Senaryoları

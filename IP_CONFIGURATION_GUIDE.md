@@ -3,13 +3,13 @@
 ## ✅ Mevcut Durumunuz
 
 `ipconfig` sonucuna göre:
-- **Wi-Fi IPv4 Address:** `192.168.211.149`
+- **Wi-Fi IPv4 Address:** `192.168.241.149`
 - Bu IP zaten `lib/config/api_config.dart` dosyasında ayarlı ✅
 
 ## 📱 Hangi IP'yi Kullanmalısınız?
 
 ### Senaryo 1: Fiziksel Telefon/Tablet ile Test
-**Kullanın:** `192.168.211.149` (Wi-Fi IP'niz)
+**Kullanın:** `192.168.241.149` (Wi-Fi IP'niz)
 
 **Gereksinimler:**
 - ✅ Backend'iniz bu IP'de çalışıyor olmalı
@@ -35,7 +35,7 @@
 
 ```dart
 // Fiziksel cihaz için (mevcut ayar)
-static const String devBaseUrl = 'http://192.168.211.149:5001';
+static const String devBaseUrl = 'http://192.168.241.149:5001';
 
 // Android Emulator için
 static const String devBaseUrl = 'http://10.0.2.2:5001';
@@ -66,7 +66,7 @@ New-NetFirewallRule -DisplayName "Zoozy API" -Direction Inbound -LocalPort 5001 
 
 ### 1. Backend'in Çalıştığını Kontrol Edin
 Tarayıcıda açın:
-- `http://192.168.211.149:5001/swagger` (fiziksel cihaz için)
+- `http://192.168.241.149:5001/swagger` (fiziksel cihaz için)
 - `http://localhost:5001/swagger` (emulator/simulator için)
 
 ### 2. Flutter Uygulamasından Test
@@ -114,7 +114,7 @@ WiFi değiştirdiğinizde veya IP adresiniz değiştiğinde:
 
 ### Development için:
 ```dart
-static const String devBaseUrl = 'http://192.168.211.149:5001'; // Fiziksel cihaz
+static const String devBaseUrl = 'http://192.168.241.149:5001'; // Fiziksel cihaz
 // veya
 static const String devBaseUrl = 'http://10.0.2.2:5001'; // Android Emulator
 ```

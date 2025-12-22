@@ -10,6 +10,8 @@ import 'package:zoozy/screens/help_center_page.dart';
 import 'package:zoozy/services/guest_access_service.dart';
 import 'package:zoozy/services/request_service.dart';
 import 'package:zoozy/screens/pet_walk_page.dart';
+import 'package:zoozy/screens/chat_conversation_screen.dart';
+import 'package:zoozy/services/notification_service.dart';
 
 class JobsScreen extends StatefulWidget {
   const JobsScreen({super.key});
@@ -21,11 +23,13 @@ class JobsScreen extends StatefulWidget {
 class _JobsScreenState extends State<JobsScreen> {
   // Seçilen ikon index'i
   int selectedIndex = 0;
-  
+
   // Backend'den gelen job'lar
   List<Map<String, dynamic>> _jobsList = [];
   final RequestService _requestService = RequestService();
+  final NotificationService _notificationService = NotificationService();
   bool _isLoading = true;
+  bool _hasUnreadNotifications = false;
 
   // Renk paleti
   static const Color primaryPurple = Color.fromARGB(255, 111, 79, 172);
@@ -36,6 +40,7 @@ class _JobsScreenState extends State<JobsScreen> {
   void initState() {
     super.initState();
     _loadJobs();
+    _checkNotifications();
   }
 
   @override
@@ -44,7 +49,41 @@ class _JobsScreenState extends State<JobsScreen> {
     // Build tamamlandıktan sonra yükle
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadJobs();
+      _checkNotifications();
     });
+  }
+
+  /// Bildirimleri kontrol et
+  Future<void> _checkNotifications() async {
+    try {
+      final notifications = await _notificationService.getNotifications();
+      final hasUnread = notifications.any((n) => !n.isRead);
+      if (mounted) {
+        setState(() {
+          _hasUnreadNotifications = hasUnread;
+        });
+      }
+    } catch (e) {
+      print('Bildirim kontrol hatası: $e');
+    }
+  }
+
+  /// Tüm bildirimleri okundu yap
+  Future<void> _markAllNotificationsAsRead() async {
+    try {
+      final notifications = await _notificationService.getNotifications();
+      final unreadNotifications =
+          notifications.where((n) => !n.isRead).toList();
+
+      for (var notification in unreadNotifications) {
+        await _notificationService.markAsRead(notification.id);
+      }
+
+      // Bildirimleri tekrar kontrol et
+      await _checkNotifications();
+    } catch (e) {
+      print('Bildirim okundu işaretleme hatası: $e');
+    }
   }
 
   /// Backend'den diğer kullanıcıların job'larını yükle
@@ -77,9 +116,12 @@ class _JobsScreenState extends State<JobsScreen> {
   /// Hizmet ikonunu belirle
   IconData _getServiceIcon(String serviceName) {
     final lower = serviceName.toLowerCase();
-    if (lower.contains("gezdirme") || lower.contains("gezdir")) return Icons.directions_walk;
-    if (lower.contains("pansiyonu") || lower.contains("otel")) return Icons.home_filled;
-    if (lower.contains("günlük bakım") || lower.contains("bakım")) return Icons.light_mode;
+    if (lower.contains("gezdirme") || lower.contains("gezdir"))
+      return Icons.directions_walk;
+    if (lower.contains("pansiyonu") || lower.contains("otel"))
+      return Icons.home_filled;
+    if (lower.contains("günlük bakım") || lower.contains("bakım"))
+      return Icons.light_mode;
     if (lower.contains("taksi")) return Icons.local_taxi;
     if (lower.contains("tımar")) return Icons.cut;
     if (lower.contains("eğitim")) return Icons.school;
@@ -208,7 +250,8 @@ class _JobsScreenState extends State<JobsScreen> {
         if (avatar.startsWith('data:image/')) {
           final base64Index = avatar.indexOf('base64,');
           if (base64Index != -1) {
-            final base64Str = avatar.substring(base64Index + 7); // "base64," = 7 karakter
+            final base64Str =
+                avatar.substring(base64Index + 7); // "base64," = 7 karakter
             final bytes = base64Decode(base64Str);
             return MemoryImage(bytes);
           }
@@ -236,141 +279,174 @@ class _JobsScreenState extends State<JobsScreen> {
       }
     }
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
+    return GestureDetector(
+      onTap: () async {
+        // Login kontrolü
+        final allowed = await GuestAccessService.ensureLoggedIn(context);
+        if (!allowed) {
+          return;
+        }
+
+        // Job bilgilerini al
+        final jobId = job['id'] as int?;
+        final jobUserId = job['userId'] as int?;
+        final jobUsername = job['userDisplayName'] as String? ?? 'Kullanıcı';
+        final jobUserPhotoUrl = job['userPhotoUrl'] as String? ?? '';
+
+        if (jobId == null || jobUserId == null) {
+          return;
+        }
+
+        // ChatConversationScreen'e yönlendir
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatConversationScreen(
+              jobId: jobId,
+              jobUserId: jobUserId,
+              jobUsername: jobUsername,
+              jobUserPhotoUrl: jobUserPhotoUrl,
+            ),
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Kullanıcı bilgisi
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: primaryPurple.withOpacity(0.2),
-                backgroundImage: _resolveUserAvatar(userPhotoUrl),
-                child: (userPhotoUrl == null || userPhotoUrl.isEmpty)
-                    ? const Icon(Icons.person, color: primaryPurple)
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      userDisplayName,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      serviceName,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Kullanıcı bilgisi
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: primaryPurple.withOpacity(0.2),
+                  backgroundImage: _resolveUserAvatar(userPhotoUrl),
+                  child: (userPhotoUrl == null || userPhotoUrl.isEmpty)
+                      ? const Icon(Icons.person, color: primaryPurple)
+                      : null,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Hizmet detayları
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: cardIconBgColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  _getServiceIcon(serviceName),
-                  color: primaryPurple,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (petName.isNotEmpty)
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        'Evcil Hayvan: $petName',
+                        userDisplayName,
                         style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: primaryPurple,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    const SizedBox(height: 4),
-                    if (dateRangeText != null) ...[
+                      Text(
+                        serviceName,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Hizmet detayları
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: cardIconBgColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    _getServiceIcon(serviceName),
+                    color: primaryPurple,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (petName.isNotEmpty)
+                        Text(
+                          'Evcil Hayvan: $petName',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: primaryPurple,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      if (dateRangeText != null) ...[
+                        Row(
+                          children: [
+                            Icon(Icons.calendar_today,
+                                size: 16, color: Colors.grey[600]),
+                            const SizedBox(width: 4),
+                            Text(
+                              dateRangeText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                      ],
                       Row(
                         children: [
-                          Icon(Icons.calendar_today,
+                          Icon(Icons.location_on,
                               size: 16, color: Colors.grey[600]),
                           const SizedBox(width: 4),
-                          Text(
-                            dateRangeText,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[700],
+                          Expanded(
+                            child: Text(
+                              location,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[700],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 4),
                     ],
-                    Row(
-                      children: [
-                        Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            location,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[700],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
+              ],
+            ),
+            if (note != null && note.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                note,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
-          ),
-          if (note != null && note.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              note,
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.grey[600],
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -414,27 +490,39 @@ class _JobsScreenState extends State<JobsScreen> {
                   final allowed =
                       await GuestAccessService.ensureLoggedIn(context);
                   if (allowed) {
+                    // Bildirimleri okundu yap (kırmızı nokta gitsin)
+                    await _markAllNotificationsAsRead();
+                    // State'i hemen güncelle (kırmızı nokta anında kaybolsun)
+                    if (mounted) {
+                      setState(() {
+                        _hasUnreadNotifications = false;
+                      });
+                    }
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (context) => IndexboxMessageScreen(),
                       ),
-                    );
+                    ).then((_) {
+                      // Sayfadan dönünce bildirimleri tekrar kontrol et
+                      _checkNotifications();
+                    });
                   }
                 },
               ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  width: 10,
-                  height: 10,
-                  decoration: const BoxDecoration(
-                    //color: Colors.red,
-                    shape: BoxShape.circle,
+              if (_hasUnreadNotifications)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(width: 8),
@@ -504,7 +592,7 @@ class _JobsScreenState extends State<JobsScreen> {
               ],
             ),
             const SizedBox(height: 100),
-            
+
             // Loading durumu
             if (_isLoading)
               const Center(
@@ -591,7 +679,8 @@ class _JobsScreenState extends State<JobsScreen> {
                     },
                     child: const Text(
                       "HİZMET SUN",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                   ),
                 ],

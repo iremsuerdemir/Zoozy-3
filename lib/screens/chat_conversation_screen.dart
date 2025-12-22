@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:zoozy/services/chat_service.dart';
+import 'package:zoozy/screens/edit_profile.dart';
 
 class ChatMessage {
   final String text;
@@ -55,23 +57,36 @@ class ChatMessage {
 }
 
 class ChatConversationScreen extends StatefulWidget {
-  final String contactName;
-  final String contactUsername;
-  final String contactAvatar;
-  final String phoneNumber;
+  // Eski parametreler (mevcut yapıyı korumak için)
+  final String? contactName;
+  final String? contactUsername;
+  final String? contactAvatar;
+  final String? phoneNumber;
   final String quoteAmount;
   final String statusMessage;
   final List<ChatMessage> messages;
 
+  // Yeni parametreler (backend tabanlı chat için)
+  final int? jobId;
+  final int? jobUserId;
+  final String? jobUsername;
+  final String? jobUserPhotoUrl;
+
   const ChatConversationScreen({
     super.key,
-    required this.contactName,
-    required this.contactUsername,
-    required this.contactAvatar,
-    required this.phoneNumber,
+    // Eski parametreler
+    this.contactName,
+    this.contactUsername,
+    this.contactAvatar,
+    this.phoneNumber,
     this.quoteAmount = '',
     this.statusMessage = '',
     this.messages = const [],
+    // Yeni parametreler
+    this.jobId,
+    this.jobUserId,
+    this.jobUsername,
+    this.jobUserPhotoUrl,
   });
 
   @override
@@ -84,12 +99,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   final ImagePicker _picker = ImagePicker();
 
   String _currentUserName = '';
+  int? _currentUserId;
   ImageProvider? _currentUserAvatar;
   List<ChatMessage> _messages = [];
   SharedPreferences? _prefs;
+  final ChatService _chatService = ChatService();
+  bool _isLoadingMessages = false;
+  bool _isBackendMode = false; // Backend tabanlı mod mu?
 
-  String get _historyKey => 'chat_history_${widget.contactUsername}';
-  String get _deletedKey => 'chat_deleted_${widget.contactUsername}';
+  String get _historyKey =>
+      'chat_history_${widget.contactUsername ?? widget.jobUsername ?? "unknown"}';
+  String get _deletedKey =>
+      'chat_deleted_${widget.contactUsername ?? widget.jobUsername ?? "unknown"}';
 
   @override
   void initState() {
@@ -100,16 +121,63 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   Future<void> _initializeChat() async {
     _prefs = await SharedPreferences.getInstance();
     await _loadCurrentUser(_prefs!);
-    final loaded = await _loadMessagesFromStorage();
-    if (mounted) {
-      setState(() {
-        _messages = loaded;
-      });
+
+    // Backend modunu kontrol et
+    _isBackendMode = widget.jobId != null && widget.jobUserId != null;
+
+    if (_isBackendMode) {
+      // Backend'den mesajları yükle
+      await _loadMessagesFromBackend();
+    } else {
+      // Eski yapı: SharedPreferences'tan yükle
+      final loaded = await _loadMessagesFromStorage();
+      if (mounted) {
+        setState(() {
+          _messages = loaded;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMessagesFromBackend() async {
+    if (widget.jobId == null) return;
+
+    setState(() {
+      _isLoadingMessages = true;
+    });
+
+    try {
+      final messages = await _chatService.getMessages(widget.jobId!);
+
+      // Backend'den gelen mesajları ChatMessage formatına dönüştür
+      final chatMessages = messages.map((msg) {
+        final isMe = msg.senderId == _currentUserId;
+        return ChatMessage(
+          text: msg.messageText,
+          isMe: isMe,
+          timestamp: msg.createdAt,
+        );
+      }).toList();
+
+      if (mounted) {
+        setState(() {
+          _messages = chatMessages;
+          _isLoadingMessages = false;
+        });
+      }
+    } catch (e) {
+      print('Backend mesaj yükleme hatası: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingMessages = false;
+        });
+      }
     }
   }
 
   Future<void> _loadCurrentUser(SharedPreferences prefs) async {
     final username = prefs.getString('username') ?? 'Kullanıcı';
+    final userId = prefs.getInt('userId');
     final imageString = prefs.getString('profileImagePath');
     ImageProvider? avatar;
 
@@ -124,18 +192,39 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     if (mounted) {
       setState(() {
         _currentUserName = username;
+        _currentUserId = userId;
         _currentUserAvatar = avatar;
       });
     }
   }
 
   ImageProvider? _buildContactAvatar() {
-    final avatar = widget.contactAvatar;
+    final avatar =
+        _isBackendMode ? widget.jobUserPhotoUrl : widget.contactAvatar;
+    if (avatar == null || avatar.isEmpty) return null;
+
     if (avatar.startsWith('http')) {
       return NetworkImage(avatar);
     }
     if (avatar.startsWith('assets/')) {
       return AssetImage(avatar);
+    }
+    if (avatar.startsWith('data:image/')) {
+      try {
+        final base64Index = avatar.indexOf('base64,');
+        if (base64Index != -1) {
+          final base64Str = avatar.substring(base64Index + 7);
+          final bytes = base64Decode(base64Str);
+          return MemoryImage(bytes);
+        }
+      } catch (_) {}
+    }
+    if (avatar.startsWith('base64:')) {
+      try {
+        final base64Str = avatar.substring(7);
+        final bytes = base64Decode(base64Str);
+        return MemoryImage(bytes);
+      } catch (_) {}
     }
     if (avatar.isNotEmpty) {
       try {
@@ -143,6 +232,18 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
       } catch (_) {}
     }
     return null;
+  }
+
+  String get _contactUsername {
+    return _isBackendMode
+        ? (widget.jobUsername ?? 'Kullanıcı')
+        : (widget.contactUsername ?? 'Kullanıcı');
+  }
+
+  String get _contactName {
+    return _isBackendMode
+        ? (widget.jobUsername ?? 'Kullanıcı')
+        : (widget.contactName ?? 'Kullanıcı');
   }
 
   Future<List<ChatMessage>> _loadMessagesFromStorage() async {
@@ -186,12 +287,85 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Future<void> _openWhatsApp({bool isVideo = false}) async {
-    final sanitized = widget.phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
-    if (sanitized.isEmpty) {
+    // Telefon numarasını SharedPreferences'tan al
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    String? phoneNumber = widget.phoneNumber;
+
+    // Eğer widget'tan telefon numarası yoksa, SharedPreferences'tan al
+    if (phoneNumber == null || phoneNumber.isEmpty) {
+      phoneNumber = prefs.getString('phone');
+    }
+
+    if (phoneNumber == null || phoneNumber.isEmpty) {
+      // Telefon numarası yoksa profil ekranına yönlendir
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text('Kayıtlı bir telefon numarası bulunamadı.')),
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Telefon Numarası Bulunamadı'),
+            content: const Text(
+              'Kayıtlı telefon bulunamadı. Profil ekranına yönlendiriliyorsunuz, lütfen buraya numaranızı giriniz.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('İptal'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const EditProfileScreen(),
+                    ),
+                  ).then((_) {
+                    // Profil ekranından dönünce telefon numarasını tekrar kontrol et
+                    _openWhatsApp(isVideo: isVideo);
+                  });
+                },
+                child: const Text('Profili Düzenle'),
+              ),
+            ],
+          ),
+        );
+      }
+      return;
+    }
+
+    final sanitized = phoneNumber.replaceAll(RegExp(r'[^\d+]'), '');
+    if (sanitized.isEmpty) {
+      // Telefon numarası geçersizse profil ekranına yönlendir
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Telefon Numarası Bulunamadı'),
+            content: const Text(
+              'Kayıtlı telefon bulunamadı. Profil ekranına yönlendiriliyorsunuz, lütfen buraya numaranızı giriniz.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('İptal'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const EditProfileScreen(),
+                    ),
+                  ).then((_) {
+                    // Profil ekranından dönünce telefon numarasını tekrar kontrol et
+                    _openWhatsApp(isVideo: isVideo);
+                  });
+                },
+                child: const Text('Profili Düzenle'),
+              ),
+            ],
+          ),
         );
       }
       return;
@@ -199,8 +373,8 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
 
     final encodedMessage = Uri.encodeComponent(
       isVideo
-          ? 'Merhaba ${widget.contactName}, WhatsApp üzerinden görüntülü görüşme başlatıyorum.'
-          : 'Merhaba ${widget.contactName}, Zoozy üzerinden yazıyorum.',
+          ? 'Merhaba $_contactName, WhatsApp üzerinden görüntülü görüşme başlatıyorum.'
+          : 'Merhaba $_contactName, Zoozy üzerinden yazıyorum.',
     );
     final uri = Uri.parse('https://wa.me/$sanitized?text=$encodedMessage');
 
@@ -213,18 +387,56 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     }
   }
 
-  void _sendMessage() {
+  Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
     _messageController.clear();
-    _addMessage(
-      ChatMessage(
-        text: text,
-        isMe: true,
-        timestamp: DateTime.now(),
-      ),
-    );
+
+    if (_isBackendMode) {
+      // Backend'e mesaj gönder
+      if (widget.jobId != null &&
+          widget.jobUserId != null &&
+          _currentUserId != null) {
+        final message = await _chatService.sendMessage(
+          receiverId: widget.jobUserId!,
+          jobId: widget.jobId!,
+          messageText: text,
+        );
+
+        if (message != null) {
+          // Mesaj başarıyla gönderildi, UI'ı güncelle
+          final chatMessage = ChatMessage(
+            text: text,
+            isMe: true,
+            timestamp: DateTime.now(),
+          );
+          _addMessage(chatMessage);
+
+          // Backend'den tüm mesajları yeniden yükle (güncel durum için)
+          await _loadMessagesFromBackend();
+        } else {
+          // Hata durumunda kullanıcıya bilgi ver
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Mesaj gönderilemedi. Lütfen tekrar deneyin.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      }
+    } else {
+      // Eski yapı: Local storage'a kaydet
+      _addMessage(
+        ChatMessage(
+          text: text,
+          isMe: true,
+          timestamp: DateTime.now(),
+        ),
+      );
+    }
   }
 
   void _addMessage(ChatMessage message) {
@@ -253,6 +465,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
           _buildBackground(),
@@ -301,9 +514,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
           ),
-          const Text(
-            'Sohbet',
-            style: TextStyle(
+          Text(
+            _contactUsername,
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 24,
               fontWeight: FontWeight.bold,
@@ -332,7 +545,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
         children: [
           _buildContactInfoSection(),
           const Divider(height: 1),
-          Expanded(child: _buildMessagesSection()),
+          Expanded(
+            child: _buildMessagesSection(),
+          ),
           _buildInputBar(),
         ],
       ),
@@ -344,6 +559,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -353,7 +569,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 backgroundImage: avatar,
                 child: avatar == null
                     ? Text(
-                        widget.contactName.characters.first,
+                        _contactName.isNotEmpty ? _contactName[0] : '?',
                         style: const TextStyle(color: Colors.white),
                       )
                     : null,
@@ -364,7 +580,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.contactUsername,
+                      _contactUsername,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -372,7 +588,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.contactName,
+                      _contactName,
                       style:
                           const TextStyle(color: Colors.black54, fontSize: 13),
                     ),
@@ -476,12 +692,22 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
   }
 
   Widget _buildMessagesSection() {
+    if (_isLoadingMessages) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     if (_messages.isEmpty) {
       return _buildEmptyState();
     }
 
     return ListView.builder(
       controller: _listController,
+      shrinkWrap: false,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       itemCount: _messages.length,
       itemBuilder: (context, index) => _buildMessageBubble(_messages[index]),
@@ -531,7 +757,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
               backgroundImage: avatar,
               child: avatar == null
                   ? Text(
-                      widget.contactName.characters.first,
+                      _contactName.isNotEmpty ? _contactName[0] : '?',
                       style: const TextStyle(color: Colors.white),
                     )
                   : null,
@@ -554,7 +780,7 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
                 children: [
                   if (!isMe)
                     Text(
-                      widget.contactName,
+                      _contactName,
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
                         color: Colors.black87,
@@ -591,7 +817,9 @@ class _ChatConversationScreenState extends State<ChatConversationScreen> {
               child: _currentUserAvatar == null
                   ? Text(
                       _currentUserName.isNotEmpty
-                          ? _currentUserName.characters.first
+                          ? (_currentUserName.isNotEmpty
+                              ? _currentUserName[0]
+                              : '?')
                           : 'S',
                       style: const TextStyle(color: Colors.white),
                     )

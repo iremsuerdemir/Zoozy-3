@@ -21,7 +21,7 @@ WHERE TABLE_NAME IN ('UserRequests', 'UserFavorites', 'UserComments', 'UserServi
 1. `lib/config/api_config.dart` dosyasını açın
 2. Backend'iniz çalışıyorsa IP adresini kontrol edin:
    ```dart
-   static const String devBaseUrl = 'http://192.168.211.149:5001'; // Kendi IP'nizi yazın
+   static const String devBaseUrl = 'http://192.168.241.149:5001'; // Kendi IP'nizi yazın
    ```
 3. ✅ `isProduction = false` olduğundan emin olun
 

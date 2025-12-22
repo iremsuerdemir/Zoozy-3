@@ -89,20 +89,73 @@ public class UserRequestsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<UserRequest>> CreateUserRequest([FromBody] UserRequest request)
     {
-        // UserId validation
-        var userExists = await _context.Users.AnyAsync(u => u.Id == request.UserId);
-        if (!userExists)
+        try
         {
-            return BadRequest(new { message = "Geçersiz kullanıcı ID." });
+            // UserId validation
+            if (request.UserId <= 0)
+            {
+                return BadRequest(new { message = "Geçersiz kullanıcı ID." });
+            }
+
+            var userExists = await _context.Users.AnyAsync(u => u.Id == request.UserId);
+            if (!userExists)
+            {
+                return BadRequest(new { message = "Kullanıcı bulunamadı. Lütfen giriş yapın." });
+            }
+
+            // Required field validations
+            if (string.IsNullOrWhiteSpace(request.PetName))
+            {
+                return BadRequest(new { message = "Evcil hayvan adı gereklidir." });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.ServiceName))
+            {
+                return BadRequest(new { message = "Hizmet adı gereklidir." });
+            }
+
+            request.CreatedAt = DateTime.UtcNow;
+            request.UpdatedAt = DateTime.UtcNow;
+
+            _context.UserRequests.Add(request);
+            await _context.SaveChangesAsync();
+
+            // Job oluşturulduğunda bildirim oluştur
+            // Job'u oluşturan kullanıcıyı bul
+            var jobCreator = await _context.Users.FindAsync(request.UserId);
+            if (jobCreator != null)
+            {
+                // Tüm diğer aktif kullanıcılara bildirim gönder
+                var otherUsers = await _context.Users
+                    .Where(u => u.Id != request.UserId && u.IsActive)
+                    .ToListAsync();
+
+                foreach (var user in otherUsers)
+                {
+                    var notification = new Notification
+                    {
+                        UserId = user.Id,
+                        Type = "job",
+                        Title = $"{jobCreator.DisplayName} kişisi yeni bir iş yayınladı",
+                        RelatedUserId = request.UserId,
+                        RelatedJobId = request.Id,
+                        CreatedAt = DateTime.UtcNow,
+                        IsRead = false
+                    };
+
+                    _context.Notifications.Add(notification);
+                }
+
+                await _context.SaveChangesAsync();
+            }
+
+            return CreatedAtAction(nameof(GetUserRequest), new { id = request.Id }, request);
         }
-
-        request.CreatedAt = DateTime.UtcNow;
-        request.UpdatedAt = DateTime.UtcNow;
-
-        _context.UserRequests.Add(request);
-        await _context.SaveChangesAsync();
-
-        return CreatedAtAction(nameof(GetUserRequest), new { id = request.Id }, request);
+        catch (Exception ex)
+        {
+            // Log the exception (you can use ILogger here)
+            return StatusCode(500, new { message = $"Talep kaydedilirken bir hata oluştu: {ex.Message}" });
+        }
     }
 
     // PUT: api/UserRequests/5

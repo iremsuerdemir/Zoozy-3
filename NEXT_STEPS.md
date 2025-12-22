@@ -43,7 +43,7 @@ Swagger UI'da şu endpoint'leri görmelisiniz:
 
 `lib/config/api_config.dart` dosyasında IP adresiniz zaten ayarlı:
 ```dart
-static const String devBaseUrl = 'http://192.168.211.149:5001';
+static const String devBaseUrl = 'http://192.168.241.149:5001';
 ```
 
 ✅ Bu IP doğru, değiştirmenize gerek yok.

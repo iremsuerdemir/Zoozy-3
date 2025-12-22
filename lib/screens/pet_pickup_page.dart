@@ -48,7 +48,17 @@ class _PetPickupPageState extends State<PetPickupPage> {
 
       final profileImagePath = prefs.getString('profileImagePath');
       if (profileImagePath != null && profileImagePath.isNotEmpty) {
-        profileImageBase64 = profileImagePath;
+        // Base64 string'in uzunluğunu kontrol et
+        // Backend'de şu an 5000 karakter sınırı var (migration uygulanana kadar)
+        // Geçici çözüm: Eğer 5000 karakterden uzunsa, boş gönder
+        if (profileImagePath.length > 5000) {
+          // Çok büyük resim, gönderme (backend sınırı aşıyor)
+          print(
+              '⚠️ Profil resmi çok büyük (${profileImagePath.length} karakter), backend sınırını aşıyor. Gönderilmiyor.');
+          profileImageBase64 = '';
+        } else {
+          profileImageBase64 = profileImagePath;
+        }
       }
 
       setState(() {
@@ -70,7 +80,7 @@ class _PetPickupPageState extends State<PetPickupPage> {
       );
 
       // Save to backend
-      final success = await _requestService.createRequest(newReq);
+      final result = await _requestService.createRequest(newReq);
 
       if (!mounted) return;
 
@@ -78,11 +88,13 @@ class _PetPickupPageState extends State<PetPickupPage> {
         _isSaving = false;
       });
 
-      if (!success) {
+      if (!result['success']) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Talep kaydedilirken bir hata oluştu.'),
+          SnackBar(
+            content: Text(
+                result['message'] ?? 'Talep kaydedilirken bir hata oluştu.'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
           ),
         );
         return;
@@ -94,10 +106,17 @@ class _PetPickupPageState extends State<PetPickupPage> {
         MaterialPageRoute(builder: (context) => const RequestsScreen()),
       );
     } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSaving = false;
+      });
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Hata oluştu: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
         ),
       );
     }
@@ -207,7 +226,9 @@ class _PetPickupPageState extends State<PetPickupPage> {
 
                               // Mor degrade ileri butonu
                               GestureDetector(
-                                onTap: (isButtonActive && !_isSaving) ? _onNext : null,
+                                onTap: (isButtonActive && !_isSaving)
+                                    ? _onNext
+                                    : null,
                                 child: Container(
                                   width: double.infinity,
                                   padding:
@@ -245,15 +266,18 @@ class _PetPickupPageState extends State<PetPickupPage> {
                                             height: 20,
                                             child: CircularProgressIndicator(
                                               strokeWidth: 2,
-                                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                      Colors.white),
                                             ),
                                           )
                                         : Text(
                                             "İleri",
                                             style: TextStyle(
-                                              color: (isButtonActive && !_isSaving)
-                                                  ? Colors.white
-                                                  : Colors.black54,
+                                              color:
+                                                  (isButtonActive && !_isSaving)
+                                                      ? Colors.white
+                                                      : Colors.black54,
                                               fontSize: 18,
                                               fontWeight: FontWeight.bold,
                                             ),

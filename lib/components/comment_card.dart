@@ -7,12 +7,14 @@ class CommentCard extends StatelessWidget {
   final Comment comment;
   final String? currentUserId; // Mevcut kullanıcının userId'si
   final VoidCallback? onDelete; // Silme callback'i
+  final bool isLoggedIn; // Login olan kullanıcı mı?
 
   const CommentCard({
     Key? key,
     required this.comment,
     this.currentUserId,
     this.onDelete,
+    this.isLoggedIn = false,
   }) : super(key: key);
 
   String _formatDate(DateTime date) {
@@ -121,48 +123,62 @@ class CommentCard extends StatelessWidget {
                         size: 16,
                       );
                     }),
-                    // Sadece kendi yorumunda silme butonu göster
-                    if (currentUserId != null && 
-                        comment.userId != null && 
-                        currentUserId == comment.userId &&
-                        onDelete != null)
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        color: Colors.red,
-                        onPressed: () {
-                          // Silme onayı
-                          showDialog(
-                            context: context,
-                            builder: (BuildContext context) {
-                              return AlertDialog(
-                                title: const Text('Yorumu Sil'),
-                                content: const Text('Bu yorumu silmek istediğinize emin misiniz?'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.of(context).pop(),
-                                    child: const Text('İptal'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () {
-                                      Navigator.of(context).pop();
-                                      onDelete?.call();
-                                    },
-                                    child: const Text('Sil', style: TextStyle(color: Colors.red)),
-                                  ),
-                                ],
-                              );
-                            },
-                          );
-                        },
-                      ),
                   ],
                 ),
               ],
             ),
             const SizedBox(height: 12),
-            Text(
-              comment.message,
-              style: const TextStyle(fontSize: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    comment.message,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+                // Sil ikonu - Sadece login olan kullanıcı ve kendi yorumu için
+                if (isLoggedIn &&
+                    currentUserId != null && 
+                    comment.userId != null && 
+                    currentUserId == comment.userId &&
+                    onDelete != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8.0),
+                    child: GestureDetector(
+                      onTap: () {
+                        // Silme onayı
+                        showDialog(
+                          context: context,
+                          builder: (BuildContext context) {
+                            return AlertDialog(
+                              title: const Text('Yorumu Sil'),
+                              content: const Text('Bu yorumu silmek istediğinize emin misiniz?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  child: const Text('İptal'),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(context).pop();
+                                    onDelete?.call();
+                                  },
+                                  child: const Text('Sil', style: TextStyle(color: Colors.red)),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                      child: Icon(
+                        Icons.delete_outline,
+                        size: 18,
+                        color: Colors.red[300],
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),

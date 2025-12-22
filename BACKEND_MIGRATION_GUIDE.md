@@ -44,7 +44,7 @@ Flutter servislerinde backend URL'ini güncelleyin:
 - `lib/services/comment_service_http.dart`
 - `lib/services/user_service_api.dart`
 
-Varsayılan URL: `http://192.168.211.149:5001/api/`
+Varsayılan URL: `http://192.168.241.149:5001/api/`
 
 **ÖNEMLİ:** Production'da HTTPS kullanın ve CORS ayarlarını kısıtlayın!
 
